@@ -1,0 +1,28 @@
+format_version = 1
+retrieved_date = "2026-07-14"
+
+[[sources]]
+id = "nasdaq_totalview_itch_5_0"
+title = "Nasdaq TotalView-ITCH 5.0"
+url = "https://www.nasdaqtrader.com/content/technicalsupport/specifications/dataproducts/NQTVITCHSpecification.pdf"
+retrieved_date = "2026-07-14"
+document_version = "5.0"
+document_revision = "2023-04-28"
+pdf_creation_date = "2024-02-28T12:21:43Z"
+sha256 = "45e0531d1b4b3beb886e9618b2ab824a5aa9bda3a99c0dff03509306e68aacc3"
+size_bytes = 1200722
+status = "retrieved"
+notes = "Revision date is the latest entry in Appendix A; PDF metadata creation date is recorded separately."
+
+[[sources]]
+id = "nasdaq_binaryfile_1_00"
+title = "BinaryFILE Version 1.00"
+url = "https://www.nasdaqtrader.com/content/technicalsupport/specifications/dataproducts/binaryfile.pdf"
+retrieved_date = "2026-07-14"
+document_version = "1.00"
+document_revision = "2010-03-30"
+pdf_creation_date = "2010-03-31T00:04:37Z"
+sha256 = "a1f443400728b3ce44953e9ae263e4846fe6ad68420e7a635829872aefdfff60"
+size_bytes = 84384
+status = "retrieved"
+notes = "Revision date is the latest entry in the document's Revision History; PDF metadata reports 2010-03-31 01:04:37 BST."

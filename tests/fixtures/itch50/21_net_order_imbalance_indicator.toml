@@ -1,0 +1,47 @@
+format_version = 1
+message_type = "I"
+message_name = "net_order_imbalance_indicator"
+spec_section = "1.6"
+spec_pages = [18, 19]
+author = "schema-author-agent"
+reviewer = "schema-review-agent"
+review_date = "2026-07-14"
+review_status = "approved"
+byte_source = "hand-authored from the cited official field table; not schema-generated"
+raw_hex = "49 01 02 03 04 00 00 05 06 07 08 00 00 00 00 00 00 03 e8 00 00 00 00 00 00 00 64 42 54 45 53 54 20 20 20 20 00 01 d4 c0 00 01 e2 40 00 01 e8 48 4f 4c"
+raw_size = 50
+
+[negative.size_minus_one]
+derivation = "remove final byte from raw_hex"
+size = 49
+expected_error = "invalid_message_size"
+
+[negative.size_plus_one]
+derivation = "append 00 to raw_hex"
+size = 51
+expected_error = "invalid_message_size"
+
+[expected_fields]
+message_type = "I"
+stock_locate = 258
+tracking_number = 772
+timestamp = 84281096
+paired_shares = 1000
+imbalance_shares = 100
+imbalance_direction = "B"
+stock = "TEST    "
+far_price = 120000
+near_price = 123456
+current_reference_price = 125000
+cross_type = "O"
+price_variation_indicator = "L"
+
+[expected_all_messages]
+result = "emit"
+event = "net_order_imbalance_indicator"
+fields = ["stock_locate", "tracking_number", "timestamp", "paired_shares", "imbalance_shares", "imbalance_direction", "stock", "far_price", "near_price", "current_reference_price", "cross_type", "price_variation_indicator"]
+
+[expected_order_events]
+result = "skip"
+event = ""
+fields = []

@@ -1,0 +1,18 @@
+format_version = 1
+name = "test_projection"
+namespace = "feedforge::generated::test_projection"
+schema = "test_feed"
+profile = "portable_checked"
+unknown_messages = "error"
+unselected_messages = "skip"
+
+# Emit order is intentionally non-canonical.
+[[emit]]
+source = "U"
+event = "order_update"
+fields = ["*"]
+
+[[emit]]
+source = "A"
+event = "add_order"
+fields = ["price", "side"]

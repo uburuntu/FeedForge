@@ -1,0 +1,14 @@
+Checks: >-
+  -*,
+  bugprone-*,
+  clang-analyzer-*,
+  misc-*,
+  modernize-*,
+  performance-*,
+  portability-*
+WarningsAsErrors: ''
+HeaderFilterRegex: '^(include|src|tests)/'
+FormatStyle: file
+CheckOptions:
+  modernize-use-trailing-return-type.IgnoreLambda: true
+  misc-include-cleaner.IgnoreHeaders: 'test_support\.hpp'

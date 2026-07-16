@@ -1,0 +1,46 @@
+format_version = 1
+message_type = "O"
+message_name = "direct_listing_with_capital_raise"
+spec_section = "1.8"
+spec_pages = [20]
+author = "schema-author-agent"
+reviewer = "schema-review-agent"
+review_date = "2026-07-14"
+review_status = "approved"
+byte_source = "hand-authored from the cited official field table; not schema-generated"
+raw_hex = "4f 01 02 03 04 00 00 05 06 07 08 54 45 53 54 20 20 20 20 59 00 01 86 a0 00 03 0d 40 00 02 49 f0 00 00 00 00 00 00 00 55 00 02 0f 58 00 02 84 88"
+raw_size = 48
+
+[negative.size_minus_one]
+derivation = "remove final byte from raw_hex"
+size = 47
+expected_error = "invalid_message_size"
+
+[negative.size_plus_one]
+derivation = "append 00 to raw_hex"
+size = 49
+expected_error = "invalid_message_size"
+
+[expected_fields]
+message_type = "O"
+stock_locate = 258
+tracking_number = 772
+timestamp = 84281096
+stock = "TEST    "
+open_eligibility_status = "Y"
+minimum_allowable_price = 100000
+maximum_allowable_price = 200000
+near_execution_price = 150000
+near_execution_time = 85
+lower_price_range_collar = 135000
+upper_price_range_collar = 165000
+
+[expected_all_messages]
+result = "emit"
+event = "direct_listing_with_capital_raise"
+fields = ["stock_locate", "tracking_number", "timestamp", "stock", "open_eligibility_status", "minimum_allowable_price", "maximum_allowable_price", "near_execution_price", "near_execution_time", "lower_price_range_collar", "upper_price_range_collar"]
+
+[expected_order_events]
+result = "skip"
+event = ""
+fields = []

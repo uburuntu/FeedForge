@@ -1,0 +1,40 @@
+format_version = 1
+message_type = "X"
+message_name = "order_cancel"
+spec_section = "1.4.3"
+spec_pages = [15]
+author = "schema-author-agent"
+reviewer = "schema-review-agent"
+review_date = "2026-07-14"
+review_status = "approved"
+byte_source = "hand-authored from the cited official field table; not schema-generated"
+raw_hex = "58 01 02 03 04 00 00 05 06 07 08 00 00 00 00 00 00 00 11 00 00 00 22"
+raw_size = 23
+
+[negative.size_minus_one]
+derivation = "remove final byte from raw_hex"
+size = 22
+expected_error = "invalid_message_size"
+
+[negative.size_plus_one]
+derivation = "append 00 to raw_hex"
+size = 24
+expected_error = "invalid_message_size"
+
+[expected_fields]
+message_type = "X"
+stock_locate = 258
+tracking_number = 772
+timestamp = 84281096
+order_reference_number = 17
+cancelled_shares = 34
+
+[expected_all_messages]
+result = "emit"
+event = "order_cancel"
+fields = ["stock_locate", "tracking_number", "timestamp", "order_reference_number", "cancelled_shares"]
+
+[expected_order_events]
+result = "emit"
+event = "order_cancel"
+fields = ["stock_locate", "timestamp", "order_reference_number", "cancelled_shares"]

@@ -1,0 +1,12 @@
+format_version = 1
+name = "consumer_custom"
+namespace = "example::consumer_custom"
+schema = "nasdaq_totalview_itch_5_0"
+profile = "portable_checked"
+unknown_messages = "error"
+unselected_messages = "skip"
+
+[[emit]]
+source = "S"
+event = "system_event"
+fields = ["stock_locate", "timestamp", "event_code"]

@@ -1,0 +1,43 @@
+format_version = 1
+message_type = "L"
+message_name = "market_participant_position"
+spec_section = "1.2.4"
+spec_pages = [9, 10]
+author = "schema-author-agent"
+reviewer = "schema-review-agent"
+review_date = "2026-07-14"
+review_status = "approved"
+byte_source = "hand-authored from the cited official field table; not schema-generated"
+raw_hex = "4c 01 02 03 04 00 00 05 06 07 08 41 42 43 44 54 45 53 54 20 20 20 20 59 4e 41"
+raw_size = 26
+
+[negative.size_minus_one]
+derivation = "remove final byte from raw_hex"
+size = 25
+expected_error = "invalid_message_size"
+
+[negative.size_plus_one]
+derivation = "append 00 to raw_hex"
+size = 27
+expected_error = "invalid_message_size"
+
+[expected_fields]
+message_type = "L"
+stock_locate = 258
+tracking_number = 772
+timestamp = 84281096
+mpid = "ABCD"
+stock = "TEST    "
+primary_market_maker = "Y"
+market_maker_mode = "N"
+market_participant_state = "A"
+
+[expected_all_messages]
+result = "emit"
+event = "market_participant_position"
+fields = ["stock_locate", "tracking_number", "timestamp", "mpid", "stock", "primary_market_maker", "market_maker_mode", "market_participant_state"]
+
+[expected_order_events]
+result = "skip"
+event = ""
+fields = []

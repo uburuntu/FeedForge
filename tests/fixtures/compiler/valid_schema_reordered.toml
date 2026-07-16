@@ -1,0 +1,99 @@
+# Comments, source order, and key order are deliberately different.
+document_revision = "2026-07-14"
+discriminator_width = 1
+wire_endian = "big"
+protocol_version = "1.0"
+name = "test_feed"
+discriminator_offset = 0
+format_version = 1
+
+[[messages]]
+type = "H"
+name = "heartbeat"
+size = 2
+
+[[messages.fields]]
+offset = 1
+width = 1
+type = "alpha"
+name = "status"
+
+[[messages.fields]]
+value = "H"
+role = "discriminator"
+width = 1
+offset = 0
+name = "message_type"
+type = "alpha"
+
+[[messages]]
+size = 4
+type = "U"
+name = "order_update"
+
+[[messages.fields]]
+width = 1
+value = "U"
+role = "discriminator"
+offset = 0
+type = "alpha"
+name = "message_type"
+
+[[messages.fields]]
+width = 1
+offset = 3
+name = "code"
+type = "alpha"
+
+[[messages.fields]]
+offset = 1
+name = "quantity"
+width = 2
+type = "u16"
+
+[[types]]
+scale = 4
+logical = "decimal"
+width = 4
+kind = "uint"
+name = "price_4"
+
+[[messages]]
+spec_page = 1
+name = "add_order"
+spec_section = "fixture"
+size = 9
+type = "A"
+
+[[messages.fields]]
+name = "padding"
+offset = 8
+width = 1
+type = "reserved"
+
+[[messages.fields]]
+name = "side"
+allowed = ["B", "S"]
+width = 1
+type = "alpha"
+offset = 7
+
+[[messages.fields]]
+name = "price"
+width = 4
+offset = 3
+type = "price_4"
+
+[[messages.fields]]
+name = "order_id"
+offset = 1
+type = "u16"
+width = 2
+
+[[messages.fields]]
+value = "A"
+name = "message_type"
+width = 1
+role = "discriminator"
+type = "alpha"
+offset = 0

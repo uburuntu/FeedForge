@@ -1,0 +1,43 @@
+format_version = 1
+message_type = "Q"
+message_name = "cross_trade"
+spec_section = "1.5.2"
+spec_pages = [17]
+author = "schema-author-agent"
+reviewer = "schema-review-agent"
+review_date = "2026-07-14"
+review_status = "approved"
+byte_source = "hand-authored from the cited official field table; not schema-generated"
+raw_hex = "51 01 02 03 04 00 00 05 06 07 08 00 00 00 00 00 00 03 e8 54 45 53 54 20 20 20 20 00 01 e2 40 00 00 00 00 00 00 00 33 4f"
+raw_size = 40
+
+[negative.size_minus_one]
+derivation = "remove final byte from raw_hex"
+size = 39
+expected_error = "invalid_message_size"
+
+[negative.size_plus_one]
+derivation = "append 00 to raw_hex"
+size = 41
+expected_error = "invalid_message_size"
+
+[expected_fields]
+message_type = "Q"
+stock_locate = 258
+tracking_number = 772
+timestamp = 84281096
+shares = 1000
+stock = "TEST    "
+cross_price = 123456
+match_number = 51
+cross_type = "O"
+
+[expected_all_messages]
+result = "emit"
+event = "cross_trade"
+fields = ["stock_locate", "tracking_number", "timestamp", "shares", "stock", "cross_price", "match_number", "cross_type"]
+
+[expected_order_events]
+result = "skip"
+event = ""
+fields = []

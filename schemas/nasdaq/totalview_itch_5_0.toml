@@ -1,0 +1,1818 @@
+format_version = 1
+name = "nasdaq_totalview_itch_5_0"
+protocol_version = "5.0"
+document_revision = "2023-04-28"
+wire_endian = "big"
+discriminator_offset = 0
+discriminator_width = 1
+description = "Nasdaq TotalView-ITCH 5.0, audited against the official 2023-04-28 specification revision."
+
+[[types]]
+name = "timestamp"
+kind = "uint"
+width = 6
+logical = "timestamp_ns"
+
+[[types]]
+name = "stock_locate"
+kind = "uint"
+width = 2
+logical = "stock_locate"
+
+[[types]]
+name = "tracking_number"
+kind = "uint"
+width = 2
+logical = "tracking_number"
+
+[[types]]
+name = "order_reference_number"
+kind = "uint"
+width = 8
+logical = "order_reference_number"
+
+[[types]]
+name = "match_number"
+kind = "uint"
+width = 8
+logical = "match_number"
+
+[[types]]
+name = "share_count"
+kind = "uint"
+width = 4
+logical = "share_count"
+
+[[types]]
+name = "price_4"
+kind = "uint"
+width = 4
+logical = "decimal"
+scale = 4
+
+[[types]]
+name = "price_8"
+kind = "uint"
+width = 8
+logical = "decimal"
+scale = 8
+
+[[messages]]
+name = "system_event"
+type = "S"
+size = 12
+description = "System Event Message"
+spec_section = "1.1"
+spec_page = 4
+
+[[messages.fields]]
+name = "message_type"
+type = "alpha"
+offset = 0
+width = 1
+role = "discriminator"
+value = "S"
+spec_section = "1.1"
+spec_page = 4
+
+[[messages.fields]]
+name = "stock_locate"
+type = "stock_locate"
+offset = 1
+width = 2
+spec_section = "1.1"
+spec_page = 4
+
+[[messages.fields]]
+name = "tracking_number"
+type = "tracking_number"
+offset = 3
+width = 2
+spec_section = "1.1"
+spec_page = 4
+
+[[messages.fields]]
+name = "timestamp"
+type = "timestamp"
+offset = 5
+width = 6
+spec_section = "1.1"
+spec_page = 4
+
+[[messages.fields]]
+name = "event_code"
+type = "alpha"
+offset = 11
+width = 1
+spec_section = "1.1"
+spec_page = 4
+
+[[messages]]
+name = "stock_directory"
+type = "R"
+size = 39
+description = "Stock Directory Message"
+spec_section = "1.2.1"
+spec_page = 5
+
+[[messages.fields]]
+name = "message_type"
+type = "alpha"
+offset = 0
+width = 1
+role = "discriminator"
+value = "R"
+spec_section = "1.2.1"
+spec_page = 5
+
+[[messages.fields]]
+name = "stock_locate"
+type = "stock_locate"
+offset = 1
+width = 2
+spec_section = "1.2.1"
+spec_page = 5
+
+[[messages.fields]]
+name = "tracking_number"
+type = "tracking_number"
+offset = 3
+width = 2
+spec_section = "1.2.1"
+spec_page = 5
+
+[[messages.fields]]
+name = "timestamp"
+type = "timestamp"
+offset = 5
+width = 6
+spec_section = "1.2.1"
+spec_page = 5
+
+[[messages.fields]]
+name = "stock"
+type = "alpha"
+offset = 11
+width = 8
+spec_section = "1.2.1"
+spec_page = 5
+
+[[messages.fields]]
+name = "market_category"
+type = "alpha"
+offset = 19
+width = 1
+spec_section = "1.2.1"
+spec_page = 5
+
+[[messages.fields]]
+name = "financial_status_indicator"
+type = "alpha"
+offset = 20
+width = 1
+spec_section = "1.2.1"
+spec_page = 6
+
+[[messages.fields]]
+name = "round_lot_size"
+type = "share_count"
+offset = 21
+width = 4
+spec_section = "1.2.1"
+spec_page = 6
+
+[[messages.fields]]
+name = "round_lots_only"
+type = "alpha"
+offset = 25
+width = 1
+spec_section = "1.2.1"
+spec_page = 6
+
+[[messages.fields]]
+name = "issue_classification"
+type = "alpha"
+offset = 26
+width = 1
+spec_section = "1.2.1"
+spec_page = 6
+
+[[messages.fields]]
+name = "issue_sub_type"
+type = "alpha"
+offset = 27
+width = 2
+spec_section = "1.2.1"
+spec_page = 6
+
+[[messages.fields]]
+name = "authenticity"
+type = "alpha"
+offset = 29
+width = 1
+spec_section = "1.2.1"
+spec_page = 6
+
+[[messages.fields]]
+name = "short_sale_threshold_indicator"
+type = "alpha"
+offset = 30
+width = 1
+spec_section = "1.2.1"
+spec_page = 7
+
+[[messages.fields]]
+name = "ipo_flag"
+type = "alpha"
+offset = 31
+width = 1
+spec_section = "1.2.1"
+spec_page = 7
+
+[[messages.fields]]
+name = "luld_reference_price_tier"
+type = "alpha"
+offset = 32
+width = 1
+spec_section = "1.2.1"
+spec_page = 7
+
+[[messages.fields]]
+name = "etp_flag"
+type = "alpha"
+offset = 33
+width = 1
+spec_section = "1.2.1"
+spec_page = 7
+
+[[messages.fields]]
+name = "etp_leverage_factor"
+type = "u32"
+offset = 34
+width = 4
+spec_section = "1.2.1"
+spec_page = 7
+
+[[messages.fields]]
+name = "inverse_indicator"
+type = "alpha"
+offset = 38
+width = 1
+spec_section = "1.2.1"
+spec_page = 8
+
+[[messages]]
+name = "stock_trading_action"
+type = "H"
+size = 25
+description = "Stock Trading Action Message"
+spec_section = "1.2.2"
+spec_page = 8
+
+[[messages.fields]]
+name = "message_type"
+type = "alpha"
+offset = 0
+width = 1
+role = "discriminator"
+value = "H"
+spec_section = "1.2.2"
+spec_page = 8
+
+[[messages.fields]]
+name = "stock_locate"
+type = "stock_locate"
+offset = 1
+width = 2
+spec_section = "1.2.2"
+spec_page = 8
+
+[[messages.fields]]
+name = "tracking_number"
+type = "tracking_number"
+offset = 3
+width = 2
+spec_section = "1.2.2"
+spec_page = 8
+
+[[messages.fields]]
+name = "timestamp"
+type = "timestamp"
+offset = 5
+width = 6
+spec_section = "1.2.2"
+spec_page = 8
+
+[[messages.fields]]
+name = "stock"
+type = "alpha"
+offset = 11
+width = 8
+spec_section = "1.2.2"
+spec_page = 8
+
+[[messages.fields]]
+name = "trading_state"
+type = "alpha"
+offset = 19
+width = 1
+spec_section = "1.2.2"
+spec_page = 8
+
+[[messages.fields]]
+name = "reserved"
+type = "reserved"
+offset = 20
+width = 1
+description = "Official reserved byte."
+spec_section = "1.2.2"
+spec_page = 8
+
+[[messages.fields]]
+name = "reason"
+type = "alpha"
+offset = 21
+width = 4
+spec_section = "1.2.2"
+spec_page = 8
+
+[[messages]]
+name = "reg_sho_restriction"
+type = "Y"
+size = 20
+description = "Reg SHO Short Sale Price Test Restricted Indicator Message"
+spec_section = "1.2.3"
+spec_page = 9
+
+[[messages.fields]]
+name = "message_type"
+type = "alpha"
+offset = 0
+width = 1
+role = "discriminator"
+value = "Y"
+spec_section = "1.2.3"
+spec_page = 9
+
+[[messages.fields]]
+name = "stock_locate"
+type = "stock_locate"
+offset = 1
+width = 2
+spec_section = "1.2.3"
+spec_page = 9
+
+[[messages.fields]]
+name = "tracking_number"
+type = "tracking_number"
+offset = 3
+width = 2
+spec_section = "1.2.3"
+spec_page = 9
+
+[[messages.fields]]
+name = "timestamp"
+type = "timestamp"
+offset = 5
+width = 6
+spec_section = "1.2.3"
+spec_page = 9
+
+[[messages.fields]]
+name = "stock"
+type = "alpha"
+offset = 11
+width = 8
+spec_section = "1.2.3"
+spec_page = 9
+
+[[messages.fields]]
+name = "reg_sho_action"
+type = "alpha"
+offset = 19
+width = 1
+spec_section = "1.2.3"
+spec_page = 9
+
+[[messages]]
+name = "market_participant_position"
+type = "L"
+size = 26
+description = "Market Participant Position Message"
+spec_section = "1.2.4"
+spec_page = 9
+
+[[messages.fields]]
+name = "message_type"
+type = "alpha"
+offset = 0
+width = 1
+role = "discriminator"
+value = "L"
+spec_section = "1.2.4"
+spec_page = 9
+
+[[messages.fields]]
+name = "stock_locate"
+type = "stock_locate"
+offset = 1
+width = 2
+spec_section = "1.2.4"
+spec_page = 9
+
+[[messages.fields]]
+name = "tracking_number"
+type = "tracking_number"
+offset = 3
+width = 2
+spec_section = "1.2.4"
+spec_page = 9
+
+[[messages.fields]]
+name = "timestamp"
+type = "timestamp"
+offset = 5
+width = 6
+spec_section = "1.2.4"
+spec_page = 9
+
+[[messages.fields]]
+name = "mpid"
+type = "alpha"
+offset = 11
+width = 4
+spec_section = "1.2.4"
+spec_page = 10
+
+[[messages.fields]]
+name = "stock"
+type = "alpha"
+offset = 15
+width = 8
+spec_section = "1.2.4"
+spec_page = 10
+
+[[messages.fields]]
+name = "primary_market_maker"
+type = "alpha"
+offset = 23
+width = 1
+spec_section = "1.2.4"
+spec_page = 10
+
+[[messages.fields]]
+name = "market_maker_mode"
+type = "alpha"
+offset = 24
+width = 1
+spec_section = "1.2.4"
+spec_page = 10
+
+[[messages.fields]]
+name = "market_participant_state"
+type = "alpha"
+offset = 25
+width = 1
+spec_section = "1.2.4"
+spec_page = 10
+
+[[messages]]
+name = "mwcb_decline_level"
+type = "V"
+size = 35
+description = "Market-Wide Circuit Breaker Decline Level Message"
+spec_section = "1.2.5.1"
+spec_page = 10
+
+[[messages.fields]]
+name = "message_type"
+type = "alpha"
+offset = 0
+width = 1
+role = "discriminator"
+value = "V"
+spec_section = "1.2.5.1"
+spec_page = 10
+
+[[messages.fields]]
+name = "stock_locate"
+type = "stock_locate"
+offset = 1
+width = 2
+spec_section = "1.2.5.1"
+spec_page = 10
+
+[[messages.fields]]
+name = "tracking_number"
+type = "tracking_number"
+offset = 3
+width = 2
+spec_section = "1.2.5.1"
+spec_page = 10
+
+[[messages.fields]]
+name = "timestamp"
+type = "timestamp"
+offset = 5
+width = 6
+spec_section = "1.2.5.1"
+spec_page = 10
+
+[[messages.fields]]
+name = "level_1"
+type = "price_8"
+offset = 11
+width = 8
+spec_section = "1.2.5.1"
+spec_page = 10
+
+[[messages.fields]]
+name = "level_2"
+type = "price_8"
+offset = 19
+width = 8
+spec_section = "1.2.5.1"
+spec_page = 10
+
+[[messages.fields]]
+name = "level_3"
+type = "price_8"
+offset = 27
+width = 8
+spec_section = "1.2.5.1"
+spec_page = 10
+
+[[messages]]
+name = "mwcb_status"
+type = "W"
+size = 12
+description = "Market-Wide Circuit Breaker Status Message"
+spec_section = "1.2.5.2"
+spec_page = 11
+
+[[messages.fields]]
+name = "message_type"
+type = "alpha"
+offset = 0
+width = 1
+role = "discriminator"
+value = "W"
+spec_section = "1.2.5.2"
+spec_page = 11
+
+[[messages.fields]]
+name = "stock_locate"
+type = "stock_locate"
+offset = 1
+width = 2
+spec_section = "1.2.5.2"
+spec_page = 11
+
+[[messages.fields]]
+name = "tracking_number"
+type = "tracking_number"
+offset = 3
+width = 2
+spec_section = "1.2.5.2"
+spec_page = 11
+
+[[messages.fields]]
+name = "timestamp"
+type = "timestamp"
+offset = 5
+width = 6
+spec_section = "1.2.5.2"
+spec_page = 11
+
+[[messages.fields]]
+name = "breached_level"
+type = "alpha"
+offset = 11
+width = 1
+spec_section = "1.2.5.2"
+spec_page = 11
+
+[[messages]]
+name = "ipo_quoting_period_update"
+type = "K"
+size = 28
+description = "IPO Quoting Period Update Message"
+spec_section = "1.2.6"
+spec_page = 11
+
+[[messages.fields]]
+name = "message_type"
+type = "alpha"
+offset = 0
+width = 1
+role = "discriminator"
+value = "K"
+spec_section = "1.2.6"
+spec_page = 11
+
+[[messages.fields]]
+name = "stock_locate"
+type = "stock_locate"
+offset = 1
+width = 2
+spec_section = "1.2.6"
+spec_page = 11
+
+[[messages.fields]]
+name = "tracking_number"
+type = "tracking_number"
+offset = 3
+width = 2
+spec_section = "1.2.6"
+spec_page = 11
+
+[[messages.fields]]
+name = "timestamp"
+type = "timestamp"
+offset = 5
+width = 6
+spec_section = "1.2.6"
+spec_page = 11
+
+[[messages.fields]]
+name = "stock"
+type = "alpha"
+offset = 11
+width = 8
+spec_section = "1.2.6"
+spec_page = 11
+
+[[messages.fields]]
+name = "ipo_quotation_release_time"
+type = "u32"
+offset = 19
+width = 4
+spec_section = "1.2.6"
+spec_page = 11
+
+[[messages.fields]]
+name = "ipo_quotation_release_qualifier"
+type = "alpha"
+offset = 23
+width = 1
+spec_section = "1.2.6"
+spec_page = 11
+
+[[messages.fields]]
+name = "ipo_price"
+type = "price_4"
+offset = 24
+width = 4
+spec_section = "1.2.6"
+spec_page = 11
+
+[[messages]]
+name = "luld_auction_collar"
+type = "J"
+size = 35
+description = "Limit Up-Limit Down Auction Collar Message"
+spec_section = "1.2.7"
+spec_page = 12
+
+[[messages.fields]]
+name = "message_type"
+type = "alpha"
+offset = 0
+width = 1
+role = "discriminator"
+value = "J"
+spec_section = "1.2.7"
+spec_page = 12
+
+[[messages.fields]]
+name = "stock_locate"
+type = "stock_locate"
+offset = 1
+width = 2
+spec_section = "1.2.7"
+spec_page = 12
+
+[[messages.fields]]
+name = "tracking_number"
+type = "tracking_number"
+offset = 3
+width = 2
+spec_section = "1.2.7"
+spec_page = 12
+
+[[messages.fields]]
+name = "timestamp"
+type = "timestamp"
+offset = 5
+width = 6
+spec_section = "1.2.7"
+spec_page = 12
+
+[[messages.fields]]
+name = "stock"
+type = "alpha"
+offset = 11
+width = 8
+spec_section = "1.2.7"
+spec_page = 12
+
+[[messages.fields]]
+name = "auction_collar_reference_price"
+type = "price_4"
+offset = 19
+width = 4
+spec_section = "1.2.7"
+spec_page = 12
+
+[[messages.fields]]
+name = "upper_auction_collar_price"
+type = "price_4"
+offset = 23
+width = 4
+spec_section = "1.2.7"
+spec_page = 12
+
+[[messages.fields]]
+name = "lower_auction_collar_price"
+type = "price_4"
+offset = 27
+width = 4
+spec_section = "1.2.7"
+spec_page = 12
+
+[[messages.fields]]
+name = "auction_collar_extension"
+type = "u32"
+offset = 31
+width = 4
+spec_section = "1.2.7"
+spec_page = 12
+
+[[messages]]
+name = "operational_halt"
+type = "h"
+size = 21
+description = "Operational Halt Message"
+spec_section = "1.2.8"
+spec_page = 12
+
+[[messages.fields]]
+name = "message_type"
+type = "alpha"
+offset = 0
+width = 1
+role = "discriminator"
+value = "h"
+spec_section = "1.2.8"
+spec_page = 12
+
+[[messages.fields]]
+name = "stock_locate"
+type = "stock_locate"
+offset = 1
+width = 2
+spec_section = "1.2.8"
+spec_page = 12
+
+[[messages.fields]]
+name = "tracking_number"
+type = "tracking_number"
+offset = 3
+width = 2
+spec_section = "1.2.8"
+spec_page = 12
+
+[[messages.fields]]
+name = "timestamp"
+type = "timestamp"
+offset = 5
+width = 6
+spec_section = "1.2.8"
+spec_page = 12
+
+[[messages.fields]]
+name = "stock"
+type = "alpha"
+offset = 11
+width = 8
+spec_section = "1.2.8"
+spec_page = 12
+
+[[messages.fields]]
+name = "market_code"
+type = "alpha"
+offset = 19
+width = 1
+spec_section = "1.2.8"
+spec_page = 12
+
+[[messages.fields]]
+name = "operational_halt_action"
+type = "alpha"
+offset = 20
+width = 1
+spec_section = "1.2.8"
+spec_page = 12
+
+[[messages]]
+name = "add_order"
+type = "A"
+size = 36
+description = "Add Order - No MPID Attribution Message"
+spec_section = "1.3.1"
+spec_page = 13
+
+[[messages.fields]]
+name = "message_type"
+type = "alpha"
+offset = 0
+width = 1
+role = "discriminator"
+value = "A"
+spec_section = "1.3.1"
+spec_page = 13
+
+[[messages.fields]]
+name = "stock_locate"
+type = "stock_locate"
+offset = 1
+width = 2
+spec_section = "1.3.1"
+spec_page = 13
+
+[[messages.fields]]
+name = "tracking_number"
+type = "tracking_number"
+offset = 3
+width = 2
+spec_section = "1.3.1"
+spec_page = 13
+
+[[messages.fields]]
+name = "timestamp"
+type = "timestamp"
+offset = 5
+width = 6
+spec_section = "1.3.1"
+spec_page = 13
+
+[[messages.fields]]
+name = "order_reference_number"
+type = "order_reference_number"
+offset = 11
+width = 8
+spec_section = "1.3.1"
+spec_page = 13
+
+[[messages.fields]]
+name = "buy_sell_indicator"
+type = "alpha"
+offset = 19
+width = 1
+spec_section = "1.3.1"
+spec_page = 13
+
+[[messages.fields]]
+name = "shares"
+type = "share_count"
+offset = 20
+width = 4
+spec_section = "1.3.1"
+spec_page = 13
+
+[[messages.fields]]
+name = "stock"
+type = "alpha"
+offset = 24
+width = 8
+spec_section = "1.3.1"
+spec_page = 13
+
+[[messages.fields]]
+name = "price"
+type = "price_4"
+offset = 32
+width = 4
+spec_section = "1.3.1"
+spec_page = 13
+
+[[messages]]
+name = "add_order_mpid"
+type = "F"
+size = 40
+description = "Add Order - MPID Attribution Message"
+spec_section = "1.3.2"
+spec_page = 13
+
+[[messages.fields]]
+name = "message_type"
+type = "alpha"
+offset = 0
+width = 1
+role = "discriminator"
+value = "F"
+spec_section = "1.3.2"
+spec_page = 13
+
+[[messages.fields]]
+name = "stock_locate"
+type = "stock_locate"
+offset = 1
+width = 2
+spec_section = "1.3.2"
+spec_page = 13
+
+[[messages.fields]]
+name = "tracking_number"
+type = "tracking_number"
+offset = 3
+width = 2
+spec_section = "1.3.2"
+spec_page = 13
+
+[[messages.fields]]
+name = "timestamp"
+type = "timestamp"
+offset = 5
+width = 6
+spec_section = "1.3.2"
+spec_page = 13
+
+[[messages.fields]]
+name = "order_reference_number"
+type = "order_reference_number"
+offset = 11
+width = 8
+spec_section = "1.3.2"
+spec_page = 13
+
+[[messages.fields]]
+name = "buy_sell_indicator"
+type = "alpha"
+offset = 19
+width = 1
+spec_section = "1.3.2"
+spec_page = 13
+
+[[messages.fields]]
+name = "shares"
+type = "share_count"
+offset = 20
+width = 4
+spec_section = "1.3.2"
+spec_page = 13
+
+[[messages.fields]]
+name = "stock"
+type = "alpha"
+offset = 24
+width = 8
+spec_section = "1.3.2"
+spec_page = 13
+
+[[messages.fields]]
+name = "price"
+type = "price_4"
+offset = 32
+width = 4
+spec_section = "1.3.2"
+spec_page = 13
+
+[[messages.fields]]
+name = "attribution"
+type = "alpha"
+offset = 36
+width = 4
+spec_section = "1.3.2"
+spec_page = 13
+
+[[messages]]
+name = "order_executed"
+type = "E"
+size = 31
+description = "Order Executed Message"
+spec_section = "1.4.1"
+spec_page = 14
+
+[[messages.fields]]
+name = "message_type"
+type = "alpha"
+offset = 0
+width = 1
+role = "discriminator"
+value = "E"
+spec_section = "1.4.1"
+spec_page = 14
+
+[[messages.fields]]
+name = "stock_locate"
+type = "stock_locate"
+offset = 1
+width = 2
+spec_section = "1.4.1"
+spec_page = 14
+
+[[messages.fields]]
+name = "tracking_number"
+type = "tracking_number"
+offset = 3
+width = 2
+spec_section = "1.4.1"
+spec_page = 14
+
+[[messages.fields]]
+name = "timestamp"
+type = "timestamp"
+offset = 5
+width = 6
+spec_section = "1.4.1"
+spec_page = 14
+
+[[messages.fields]]
+name = "order_reference_number"
+type = "order_reference_number"
+offset = 11
+width = 8
+spec_section = "1.4.1"
+spec_page = 14
+
+[[messages.fields]]
+name = "executed_shares"
+type = "share_count"
+offset = 19
+width = 4
+spec_section = "1.4.1"
+spec_page = 14
+
+[[messages.fields]]
+name = "match_number"
+type = "match_number"
+offset = 23
+width = 8
+spec_section = "1.4.1"
+spec_page = 14
+
+[[messages]]
+name = "order_executed_with_price"
+type = "C"
+size = 36
+description = "Order Executed With Price Message"
+spec_section = "1.4.2"
+spec_page = 14
+
+[[messages.fields]]
+name = "message_type"
+type = "alpha"
+offset = 0
+width = 1
+role = "discriminator"
+value = "C"
+spec_section = "1.4.2"
+spec_page = 14
+
+[[messages.fields]]
+name = "stock_locate"
+type = "stock_locate"
+offset = 1
+width = 2
+spec_section = "1.4.2"
+spec_page = 14
+
+[[messages.fields]]
+name = "tracking_number"
+type = "tracking_number"
+offset = 3
+width = 2
+spec_section = "1.4.2"
+spec_page = 14
+
+[[messages.fields]]
+name = "timestamp"
+type = "timestamp"
+offset = 5
+width = 6
+spec_section = "1.4.2"
+spec_page = 15
+
+[[messages.fields]]
+name = "order_reference_number"
+type = "order_reference_number"
+offset = 11
+width = 8
+spec_section = "1.4.2"
+spec_page = 15
+
+[[messages.fields]]
+name = "executed_shares"
+type = "share_count"
+offset = 19
+width = 4
+spec_section = "1.4.2"
+spec_page = 15
+
+[[messages.fields]]
+name = "match_number"
+type = "match_number"
+offset = 23
+width = 8
+spec_section = "1.4.2"
+spec_page = 15
+
+[[messages.fields]]
+name = "printable"
+type = "alpha"
+offset = 31
+width = 1
+spec_section = "1.4.2"
+spec_page = 15
+
+[[messages.fields]]
+name = "execution_price"
+type = "price_4"
+offset = 32
+width = 4
+spec_section = "1.4.2"
+spec_page = 15
+
+[[messages]]
+name = "order_cancel"
+type = "X"
+size = 23
+description = "Order Cancel Message"
+spec_section = "1.4.3"
+spec_page = 15
+
+[[messages.fields]]
+name = "message_type"
+type = "alpha"
+offset = 0
+width = 1
+role = "discriminator"
+value = "X"
+spec_section = "1.4.3"
+spec_page = 15
+
+[[messages.fields]]
+name = "stock_locate"
+type = "stock_locate"
+offset = 1
+width = 2
+spec_section = "1.4.3"
+spec_page = 15
+
+[[messages.fields]]
+name = "tracking_number"
+type = "tracking_number"
+offset = 3
+width = 2
+spec_section = "1.4.3"
+spec_page = 15
+
+[[messages.fields]]
+name = "timestamp"
+type = "timestamp"
+offset = 5
+width = 6
+spec_section = "1.4.3"
+spec_page = 15
+
+[[messages.fields]]
+name = "order_reference_number"
+type = "order_reference_number"
+offset = 11
+width = 8
+spec_section = "1.4.3"
+spec_page = 15
+
+[[messages.fields]]
+name = "cancelled_shares"
+type = "share_count"
+offset = 19
+width = 4
+spec_section = "1.4.3"
+spec_page = 15
+
+[[messages]]
+name = "order_delete"
+type = "D"
+size = 19
+description = "Order Delete Message"
+spec_section = "1.4.4"
+spec_page = 15
+
+[[messages.fields]]
+name = "message_type"
+type = "alpha"
+offset = 0
+width = 1
+role = "discriminator"
+value = "D"
+spec_section = "1.4.4"
+spec_page = 15
+
+[[messages.fields]]
+name = "stock_locate"
+type = "stock_locate"
+offset = 1
+width = 2
+spec_section = "1.4.4"
+spec_page = 15
+
+[[messages.fields]]
+name = "tracking_number"
+type = "tracking_number"
+offset = 3
+width = 2
+spec_section = "1.4.4"
+spec_page = 15
+
+[[messages.fields]]
+name = "timestamp"
+type = "timestamp"
+offset = 5
+width = 6
+spec_section = "1.4.4"
+spec_page = 15
+
+[[messages.fields]]
+name = "order_reference_number"
+type = "order_reference_number"
+offset = 11
+width = 8
+spec_section = "1.4.4"
+spec_page = 15
+
+[[messages]]
+name = "order_replace"
+type = "U"
+size = 35
+description = "Order Replace Message"
+spec_section = "1.4.5"
+spec_page = 16
+
+[[messages.fields]]
+name = "message_type"
+type = "alpha"
+offset = 0
+width = 1
+role = "discriminator"
+value = "U"
+spec_section = "1.4.5"
+spec_page = 16
+
+[[messages.fields]]
+name = "stock_locate"
+type = "stock_locate"
+offset = 1
+width = 2
+spec_section = "1.4.5"
+spec_page = 16
+
+[[messages.fields]]
+name = "tracking_number"
+type = "tracking_number"
+offset = 3
+width = 2
+spec_section = "1.4.5"
+spec_page = 16
+
+[[messages.fields]]
+name = "timestamp"
+type = "timestamp"
+offset = 5
+width = 6
+spec_section = "1.4.5"
+spec_page = 16
+
+[[messages.fields]]
+name = "original_order_reference_number"
+type = "order_reference_number"
+offset = 11
+width = 8
+spec_section = "1.4.5"
+spec_page = 16
+
+[[messages.fields]]
+name = "new_order_reference_number"
+type = "order_reference_number"
+offset = 19
+width = 8
+spec_section = "1.4.5"
+spec_page = 16
+
+[[messages.fields]]
+name = "shares"
+type = "share_count"
+offset = 27
+width = 4
+spec_section = "1.4.5"
+spec_page = 16
+
+[[messages.fields]]
+name = "price"
+type = "price_4"
+offset = 31
+width = 4
+spec_section = "1.4.5"
+spec_page = 16
+
+[[messages]]
+name = "trade"
+type = "P"
+size = 44
+description = "Trade Message (Non-Cross)"
+spec_section = "1.5.1"
+spec_page = 16
+
+[[messages.fields]]
+name = "message_type"
+type = "alpha"
+offset = 0
+width = 1
+role = "discriminator"
+value = "P"
+spec_section = "1.5.1"
+spec_page = 16
+
+[[messages.fields]]
+name = "stock_locate"
+type = "stock_locate"
+offset = 1
+width = 2
+spec_section = "1.5.1"
+spec_page = 16
+
+[[messages.fields]]
+name = "tracking_number"
+type = "tracking_number"
+offset = 3
+width = 2
+spec_section = "1.5.1"
+spec_page = 16
+
+[[messages.fields]]
+name = "timestamp"
+type = "timestamp"
+offset = 5
+width = 6
+spec_section = "1.5.1"
+spec_page = 16
+
+[[messages.fields]]
+name = "order_reference_number"
+type = "order_reference_number"
+offset = 11
+width = 8
+spec_section = "1.5.1"
+spec_page = 16
+
+[[messages.fields]]
+name = "buy_sell_indicator"
+type = "alpha"
+offset = 19
+width = 1
+spec_section = "1.5.1"
+spec_page = 17
+
+[[messages.fields]]
+name = "shares"
+type = "share_count"
+offset = 20
+width = 4
+spec_section = "1.5.1"
+spec_page = 17
+
+[[messages.fields]]
+name = "stock"
+type = "alpha"
+offset = 24
+width = 8
+spec_section = "1.5.1"
+spec_page = 17
+
+[[messages.fields]]
+name = "price"
+type = "price_4"
+offset = 32
+width = 4
+spec_section = "1.5.1"
+spec_page = 17
+
+[[messages.fields]]
+name = "match_number"
+type = "match_number"
+offset = 36
+width = 8
+spec_section = "1.5.1"
+spec_page = 17
+
+[[messages]]
+name = "cross_trade"
+type = "Q"
+size = 40
+description = "Cross Trade Message"
+spec_section = "1.5.2"
+spec_page = 17
+
+[[messages.fields]]
+name = "message_type"
+type = "alpha"
+offset = 0
+width = 1
+role = "discriminator"
+value = "Q"
+spec_section = "1.5.2"
+spec_page = 17
+
+[[messages.fields]]
+name = "stock_locate"
+type = "stock_locate"
+offset = 1
+width = 2
+spec_section = "1.5.2"
+spec_page = 17
+
+[[messages.fields]]
+name = "tracking_number"
+type = "tracking_number"
+offset = 3
+width = 2
+spec_section = "1.5.2"
+spec_page = 17
+
+[[messages.fields]]
+name = "timestamp"
+type = "timestamp"
+offset = 5
+width = 6
+spec_section = "1.5.2"
+spec_page = 17
+
+[[messages.fields]]
+name = "shares"
+type = "u64"
+offset = 11
+width = 8
+spec_section = "1.5.2"
+spec_page = 17
+
+[[messages.fields]]
+name = "stock"
+type = "alpha"
+offset = 19
+width = 8
+spec_section = "1.5.2"
+spec_page = 17
+
+[[messages.fields]]
+name = "cross_price"
+type = "price_4"
+offset = 27
+width = 4
+spec_section = "1.5.2"
+spec_page = 17
+
+[[messages.fields]]
+name = "match_number"
+type = "match_number"
+offset = 31
+width = 8
+spec_section = "1.5.2"
+spec_page = 17
+
+[[messages.fields]]
+name = "cross_type"
+type = "alpha"
+offset = 39
+width = 1
+spec_section = "1.5.2"
+spec_page = 17
+
+[[messages]]
+name = "broken_trade"
+type = "B"
+size = 19
+description = "Broken Trade / Order Execution Message"
+spec_section = "1.5.3"
+spec_page = 18
+
+[[messages.fields]]
+name = "message_type"
+type = "alpha"
+offset = 0
+width = 1
+role = "discriminator"
+value = "B"
+spec_section = "1.5.3"
+spec_page = 18
+
+[[messages.fields]]
+name = "stock_locate"
+type = "stock_locate"
+offset = 1
+width = 2
+spec_section = "1.5.3"
+spec_page = 18
+
+[[messages.fields]]
+name = "tracking_number"
+type = "tracking_number"
+offset = 3
+width = 2
+spec_section = "1.5.3"
+spec_page = 18
+
+[[messages.fields]]
+name = "timestamp"
+type = "timestamp"
+offset = 5
+width = 6
+spec_section = "1.5.3"
+spec_page = 18
+
+[[messages.fields]]
+name = "match_number"
+type = "match_number"
+offset = 11
+width = 8
+spec_section = "1.5.3"
+spec_page = 18
+
+[[messages]]
+name = "net_order_imbalance_indicator"
+type = "I"
+size = 50
+description = "Net Order Imbalance Indicator Message"
+spec_section = "1.6"
+spec_page = 18
+
+[[messages.fields]]
+name = "message_type"
+type = "alpha"
+offset = 0
+width = 1
+role = "discriminator"
+value = "I"
+spec_section = "1.6"
+spec_page = 18
+
+[[messages.fields]]
+name = "stock_locate"
+type = "stock_locate"
+offset = 1
+width = 2
+spec_section = "1.6"
+spec_page = 18
+
+[[messages.fields]]
+name = "tracking_number"
+type = "tracking_number"
+offset = 3
+width = 2
+spec_section = "1.6"
+spec_page = 18
+
+[[messages.fields]]
+name = "timestamp"
+type = "timestamp"
+offset = 5
+width = 6
+spec_section = "1.6"
+spec_page = 18
+
+[[messages.fields]]
+name = "paired_shares"
+type = "u64"
+offset = 11
+width = 8
+spec_section = "1.6"
+spec_page = 19
+
+[[messages.fields]]
+name = "imbalance_shares"
+type = "u64"
+offset = 19
+width = 8
+spec_section = "1.6"
+spec_page = 19
+
+[[messages.fields]]
+name = "imbalance_direction"
+type = "alpha"
+offset = 27
+width = 1
+spec_section = "1.6"
+spec_page = 19
+
+[[messages.fields]]
+name = "stock"
+type = "alpha"
+offset = 28
+width = 8
+spec_section = "1.6"
+spec_page = 19
+
+[[messages.fields]]
+name = "far_price"
+type = "price_4"
+offset = 36
+width = 4
+spec_section = "1.6"
+spec_page = 19
+
+[[messages.fields]]
+name = "near_price"
+type = "price_4"
+offset = 40
+width = 4
+spec_section = "1.6"
+spec_page = 19
+
+[[messages.fields]]
+name = "current_reference_price"
+type = "price_4"
+offset = 44
+width = 4
+spec_section = "1.6"
+spec_page = 19
+
+[[messages.fields]]
+name = "cross_type"
+type = "alpha"
+offset = 48
+width = 1
+spec_section = "1.6"
+spec_page = 19
+
+[[messages.fields]]
+name = "price_variation_indicator"
+type = "alpha"
+offset = 49
+width = 1
+spec_section = "1.6"
+spec_page = 19
+
+[[messages]]
+name = "retail_price_improvement_indicator"
+type = "N"
+size = 20
+description = "Retail Price Improvement Indicator Message"
+spec_section = "1.7"
+spec_page = 19
+
+[[messages.fields]]
+name = "message_type"
+type = "alpha"
+offset = 0
+width = 1
+role = "discriminator"
+value = "N"
+spec_section = "1.7"
+spec_page = 19
+
+[[messages.fields]]
+name = "stock_locate"
+type = "stock_locate"
+offset = 1
+width = 2
+spec_section = "1.7"
+spec_page = 19
+
+[[messages.fields]]
+name = "tracking_number"
+type = "tracking_number"
+offset = 3
+width = 2
+spec_section = "1.7"
+spec_page = 20
+
+[[messages.fields]]
+name = "timestamp"
+type = "timestamp"
+offset = 5
+width = 6
+spec_section = "1.7"
+spec_page = 20
+
+[[messages.fields]]
+name = "stock"
+type = "alpha"
+offset = 11
+width = 8
+spec_section = "1.7"
+spec_page = 20
+
+[[messages.fields]]
+name = "interest_flag"
+type = "alpha"
+offset = 19
+width = 1
+spec_section = "1.7"
+spec_page = 20
+
+[[messages]]
+name = "direct_listing_with_capital_raise"
+type = "O"
+size = 48
+description = "Direct Listing with Capital Raise Price Discovery Message"
+spec_section = "1.8"
+spec_page = 20
+
+[[messages.fields]]
+name = "message_type"
+type = "alpha"
+offset = 0
+width = 1
+role = "discriminator"
+value = "O"
+spec_section = "1.8"
+spec_page = 20
+
+[[messages.fields]]
+name = "stock_locate"
+type = "stock_locate"
+offset = 1
+width = 2
+spec_section = "1.8"
+spec_page = 20
+
+[[messages.fields]]
+name = "tracking_number"
+type = "tracking_number"
+offset = 3
+width = 2
+spec_section = "1.8"
+spec_page = 20
+
+[[messages.fields]]
+name = "timestamp"
+type = "timestamp"
+offset = 5
+width = 6
+spec_section = "1.8"
+spec_page = 20
+
+[[messages.fields]]
+name = "stock"
+type = "alpha"
+offset = 11
+width = 8
+spec_section = "1.8"
+spec_page = 20
+
+[[messages.fields]]
+name = "open_eligibility_status"
+type = "alpha"
+offset = 19
+width = 1
+spec_section = "1.8"
+spec_page = 20
+
+[[messages.fields]]
+name = "minimum_allowable_price"
+type = "price_4"
+offset = 20
+width = 4
+spec_section = "1.8"
+spec_page = 20
+
+[[messages.fields]]
+name = "maximum_allowable_price"
+type = "price_4"
+offset = 24
+width = 4
+spec_section = "1.8"
+spec_page = 20
+
+[[messages.fields]]
+name = "near_execution_price"
+type = "price_4"
+offset = 28
+width = 4
+spec_section = "1.8"
+spec_page = 20
+
+[[messages.fields]]
+name = "near_execution_time"
+type = "u64"
+offset = 32
+width = 8
+description = "Raw unsigned value; the official specification does not define a stronger unit."
+spec_section = "1.8"
+spec_page = 20
+
+[[messages.fields]]
+name = "lower_price_range_collar"
+type = "price_4"
+offset = 40
+width = 4
+spec_section = "1.8"
+spec_page = 20
+
+[[messages.fields]]
+name = "upper_price_range_collar"
+type = "price_4"
+offset = 44
+width = 4
+spec_section = "1.8"
+spec_page = 20

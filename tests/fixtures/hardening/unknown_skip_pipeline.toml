@@ -1,0 +1,12 @@
+format_version = 1
+name = "test_unknown_skip"
+namespace = "feedforge::generated::test_unknown_skip"
+schema = "test_feed"
+profile = "portable_checked"
+unknown_messages = "skip"
+unselected_messages = "skip"
+
+[[emit]]
+source = "A"
+event = "add_order"
+fields = ["price"]

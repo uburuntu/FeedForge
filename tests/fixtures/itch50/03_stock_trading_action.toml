@@ -1,0 +1,42 @@
+format_version = 1
+message_type = "H"
+message_name = "stock_trading_action"
+spec_section = "1.2.2"
+spec_pages = [8]
+author = "schema-author-agent"
+reviewer = "schema-review-agent"
+review_date = "2026-07-14"
+review_status = "approved"
+byte_source = "hand-authored from the cited official field table; not schema-generated"
+raw_hex = "48 01 02 03 04 00 00 05 06 07 08 54 45 53 54 20 20 20 20 48 20 54 31 20 20"
+raw_size = 25
+
+[negative.size_minus_one]
+derivation = "remove final byte from raw_hex"
+size = 24
+expected_error = "invalid_message_size"
+
+[negative.size_plus_one]
+derivation = "append 00 to raw_hex"
+size = 26
+expected_error = "invalid_message_size"
+
+[expected_fields]
+message_type = "H"
+stock_locate = 258
+tracking_number = 772
+timestamp = 84281096
+stock = "TEST    "
+trading_state = "H"
+reserved = " "
+reason = "T1  "
+
+[expected_all_messages]
+result = "emit"
+event = "stock_trading_action"
+fields = ["stock_locate", "tracking_number", "timestamp", "stock", "trading_state", "reason"]
+
+[expected_order_events]
+result = "skip"
+event = ""
+fields = []

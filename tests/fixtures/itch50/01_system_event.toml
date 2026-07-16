@@ -1,0 +1,39 @@
+format_version = 1
+message_type = "S"
+message_name = "system_event"
+spec_section = "1.1"
+spec_pages = [4]
+author = "schema-author-agent"
+reviewer = "schema-review-agent"
+review_date = "2026-07-14"
+review_status = "approved"
+byte_source = "hand-authored from the cited official field table; not schema-generated"
+raw_hex = "53 00 00 03 04 00 00 05 06 07 08 4f"
+raw_size = 12
+
+[negative.size_minus_one]
+derivation = "remove final byte from raw_hex"
+size = 11
+expected_error = "invalid_message_size"
+
+[negative.size_plus_one]
+derivation = "append 00 to raw_hex"
+size = 13
+expected_error = "invalid_message_size"
+
+[expected_fields]
+message_type = "S"
+stock_locate = 0
+tracking_number = 772
+timestamp = 84281096
+event_code = "O"
+
+[expected_all_messages]
+result = "emit"
+event = "system_event"
+fields = ["stock_locate", "tracking_number", "timestamp", "event_code"]
+
+[expected_order_events]
+result = "skip"
+event = ""
+fields = []

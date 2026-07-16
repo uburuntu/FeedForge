@@ -1,0 +1,43 @@
+format_version = 1
+message_type = "J"
+message_name = "luld_auction_collar"
+spec_section = "1.2.7"
+spec_pages = [12]
+author = "schema-author-agent"
+reviewer = "schema-review-agent"
+review_date = "2026-07-14"
+review_status = "approved"
+byte_source = "hand-authored from the cited official field table; not schema-generated"
+raw_hex = "4a 01 02 03 04 00 00 05 06 07 08 54 45 53 54 20 20 20 20 00 01 e2 40 00 01 fb d0 00 01 d4 c0 00 00 00 02"
+raw_size = 35
+
+[negative.size_minus_one]
+derivation = "remove final byte from raw_hex"
+size = 34
+expected_error = "invalid_message_size"
+
+[negative.size_plus_one]
+derivation = "append 00 to raw_hex"
+size = 36
+expected_error = "invalid_message_size"
+
+[expected_fields]
+message_type = "J"
+stock_locate = 258
+tracking_number = 772
+timestamp = 84281096
+stock = "TEST    "
+auction_collar_reference_price = 123456
+upper_auction_collar_price = 130000
+lower_auction_collar_price = 120000
+auction_collar_extension = 2
+
+[expected_all_messages]
+result = "emit"
+event = "luld_auction_collar"
+fields = ["stock_locate", "tracking_number", "timestamp", "stock", "auction_collar_reference_price", "upper_auction_collar_price", "lower_auction_collar_price", "auction_collar_extension"]
+
+[expected_order_events]
+result = "skip"
+event = ""
+fields = []

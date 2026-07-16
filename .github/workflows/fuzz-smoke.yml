@@ -1,0 +1,67 @@
+name: Fuzz smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-smoke-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fuzz-smoke:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: BinaryFILE cursor
+            executable: build/fuzz/fuzz/fuzz_binary_file
+            corpus: build/fuzz/fuzz/corpus/binary_file
+            artifact: binary-file
+          - name: All-message decode_one
+            executable: build/fuzz/fuzz/fuzz_decode_one
+            corpus: build/fuzz/fuzz/corpus/decode_one
+            artifact: decode-one
+          - name: BinaryFILE replay
+            executable: build/fuzz/fuzz/fuzz_replay
+            corpus: build/fuzz/fuzz/corpus/replay
+            artifact: replay
+
+    steps:
+      - uses: actions/checkout@v7
+      - name: Configure Clang libFuzzer
+        run: >-
+          cmake --preset fuzz
+          -DCMAKE_CXX_COMPILER=clang++
+          -DFEEDFORGE_WARNINGS_AS_ERRORS=ON
+      - name: Build all required fuzz targets
+        run: cmake --build --preset fuzz
+      - name: Prepare artifact directory
+        run: mkdir -p "${RUNNER_TEMP}/fuzz-artifacts/${{ matrix.artifact }}"
+      - name: Run deterministic fuzz smoke
+        env:
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: >-
+          "${{ matrix.executable }}"
+          "${{ matrix.corpus }}"
+          -seed=300
+          -max_total_time=15
+          -max_len=4096
+          -timeout=5
+          -print_final_stats=1
+          -artifact_prefix="${RUNNER_TEMP}/fuzz-artifacts/${{ matrix.artifact }}/"
+      - name: Upload failing input
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: fuzz-${{ matrix.artifact }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/fuzz-artifacts/${{ matrix.artifact }}/
+          if-no-files-found: ignore

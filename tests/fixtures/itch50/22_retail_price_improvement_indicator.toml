@@ -1,0 +1,40 @@
+format_version = 1
+message_type = "N"
+message_name = "retail_price_improvement_indicator"
+spec_section = "1.7"
+spec_pages = [19, 20]
+author = "schema-author-agent"
+reviewer = "schema-review-agent"
+review_date = "2026-07-14"
+review_status = "approved"
+byte_source = "hand-authored from the cited official field table; not schema-generated"
+raw_hex = "4e 01 02 03 04 00 00 05 06 07 08 54 45 53 54 20 20 20 20 42"
+raw_size = 20
+
+[negative.size_minus_one]
+derivation = "remove final byte from raw_hex"
+size = 19
+expected_error = "invalid_message_size"
+
+[negative.size_plus_one]
+derivation = "append 00 to raw_hex"
+size = 21
+expected_error = "invalid_message_size"
+
+[expected_fields]
+message_type = "N"
+stock_locate = 258
+tracking_number = 772
+timestamp = 84281096
+stock = "TEST    "
+interest_flag = "B"
+
+[expected_all_messages]
+result = "emit"
+event = "retail_price_improvement_indicator"
+fields = ["stock_locate", "tracking_number", "timestamp", "stock", "interest_flag"]
+
+[expected_order_events]
+result = "skip"
+event = ""
+fields = []

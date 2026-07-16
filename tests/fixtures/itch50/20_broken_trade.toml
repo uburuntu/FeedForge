@@ -1,0 +1,39 @@
+format_version = 1
+message_type = "B"
+message_name = "broken_trade"
+spec_section = "1.5.3"
+spec_pages = [18]
+author = "schema-author-agent"
+reviewer = "schema-review-agent"
+review_date = "2026-07-14"
+review_status = "approved"
+byte_source = "hand-authored from the cited official field table; not schema-generated"
+raw_hex = "42 01 02 03 04 00 00 05 06 07 08 00 00 00 00 00 00 00 33"
+raw_size = 19
+
+[negative.size_minus_one]
+derivation = "remove final byte from raw_hex"
+size = 18
+expected_error = "invalid_message_size"
+
+[negative.size_plus_one]
+derivation = "append 00 to raw_hex"
+size = 20
+expected_error = "invalid_message_size"
+
+[expected_fields]
+message_type = "B"
+stock_locate = 258
+tracking_number = 772
+timestamp = 84281096
+match_number = 51
+
+[expected_all_messages]
+result = "emit"
+event = "broken_trade"
+fields = ["stock_locate", "tracking_number", "timestamp", "match_number"]
+
+[expected_order_events]
+result = "skip"
+event = ""
+fields = []

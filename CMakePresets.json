@@ -1,0 +1,198 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "fast",
+      "displayName": "Fast developer build",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "FEEDFORGE_BUILD_COMPILER": "ON",
+        "FEEDFORGE_BUILD_TESTS": "ON",
+        "FEEDFORGE_BUILD_EXAMPLES": "OFF",
+        "FEEDFORGE_BUILD_FUZZERS": "OFF"
+      }
+    },
+    {
+      "name": "dev",
+      "displayName": "Full developer build",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "FEEDFORGE_BUILD_COMPILER": "ON",
+        "FEEDFORGE_BUILD_TESTS": "ON",
+        "FEEDFORGE_BUILD_EXAMPLES": "ON",
+        "FEEDFORGE_BUILD_FUZZERS": "OFF"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Release build",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "FEEDFORGE_BUILD_COMPILER": "ON",
+        "FEEDFORGE_BUILD_TESTS": "ON",
+        "FEEDFORGE_BUILD_EXAMPLES": "ON",
+        "FEEDFORGE_BUILD_FUZZERS": "OFF"
+      }
+    },
+    {
+      "name": "sanitizers",
+      "displayName": "Clang ASan and UBSan",
+      "inherits": "dev",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "clang++",
+        "FEEDFORGE_ENABLE_ASAN": "ON",
+        "FEEDFORGE_ENABLE_UBSAN": "ON"
+      }
+    },
+    {
+      "name": "compiler-off",
+      "displayName": "C++20 runtime and committed headers",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "FEEDFORGE_BUILD_COMPILER": "OFF",
+        "FEEDFORGE_BUILD_TESTS": "ON",
+        "FEEDFORGE_BUILD_EXAMPLES": "ON",
+        "FEEDFORGE_BUILD_FUZZERS": "OFF"
+      }
+    },
+    {
+      "name": "no-exceptions-rtti",
+      "displayName": "Generated runtime without exceptions or RTTI",
+      "inherits": "compiler-off",
+      "cacheVariables": {
+        "FEEDFORGE_BUILD_EXAMPLES": "OFF"
+      }
+    },
+    {
+      "name": "rtsan",
+      "displayName": "Optional Clang RealtimeSanitizer smoke",
+      "inherits": "compiler-off",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "clang++",
+        "FEEDFORGE_BUILD_EXAMPLES": "OFF",
+        "FEEDFORGE_ENABLE_RTSAN": "ON"
+      }
+    },
+    {
+      "name": "fuzz",
+      "displayName": "Clang libFuzzer build",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "FEEDFORGE_BUILD_COMPILER": "OFF",
+        "FEEDFORGE_BUILD_TESTS": "OFF",
+        "FEEDFORGE_BUILD_EXAMPLES": "OFF",
+        "FEEDFORGE_BUILD_FUZZERS": "ON"
+      }
+    },
+    {
+      "name": "bench",
+      "displayName": "Post-v0.1 benchmark baseline",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "OFF",
+        "BUILD_TESTING": "ON",
+        "FEEDFORGE_BUILD_COMPILER": "OFF",
+        "FEEDFORGE_BUILD_TESTS": "OFF",
+        "FEEDFORGE_BUILD_EXAMPLES": "OFF",
+        "FEEDFORGE_BUILD_FUZZERS": "OFF",
+        "FEEDFORGE_BUILD_BENCHMARKS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "fast", "configurePreset": "fast" },
+    { "name": "dev", "configurePreset": "dev" },
+    { "name": "release", "configurePreset": "release" },
+    { "name": "sanitizers", "configurePreset": "sanitizers" },
+    { "name": "compiler-off", "configurePreset": "compiler-off" },
+    {
+      "name": "no-exceptions-rtti",
+      "configurePreset": "no-exceptions-rtti",
+      "targets": ["feedforge_test_no_exceptions_rtti"]
+    },
+    {
+      "name": "rtsan",
+      "configurePreset": "rtsan"
+    },
+    { "name": "fuzz", "configurePreset": "fuzz" },
+    {
+      "name": "bench",
+      "configurePreset": "bench",
+      "targets": ["feedforge_benchmark"]
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "fast",
+      "configurePreset": "fast",
+      "filter": {
+        "include": {
+          "name": "^(compiler\\.|unit\\.)"
+        }
+      },
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "dev",
+      "configurePreset": "dev",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "sanitizers",
+      "configurePreset": "sanitizers",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "compiler-off",
+      "configurePreset": "compiler-off",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "no-exceptions-rtti",
+      "configurePreset": "no-exceptions-rtti",
+      "filter": {
+        "include": {
+          "name": "^hardening\\.no_exceptions_rtti$"
+        }
+      },
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "bench",
+      "configurePreset": "bench",
+      "filter": {
+        "include": {
+          "name": "^benchmark\\.smoke$"
+        }
+      },
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}
+

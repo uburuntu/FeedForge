@@ -1,0 +1,17 @@
+unselected_messages = "skip"
+unknown_messages = "error"
+profile = "portable_checked"
+schema = "test_feed"
+namespace = "feedforge::generated::test_projection"
+name = "test_projection"
+format_version = 1
+
+[[emit]]
+fields = ["price", "side"]
+event = "add_order"
+source = "A"
+
+[[emit]]
+fields = ["*"]
+source = "U"
+event = "order_update"

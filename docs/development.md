@@ -1,0 +1,174 @@
+# Development workflow
+
+On POSIX development hosts, the root `Makefile` is the human-facing command
+catalog for source-tree work. It is deliberately a thin wrapper:
+`CMakePresets.json`, CMake targets, and CTest remain authoritative. Consumers
+and native Windows developers use CMake directly, and the installed package
+does not expose the developer wrapper.
+
+Run `make` or `make help` to see the current command surface. Help is grouped by
+workflow and automatically disables colour when output is redirected, when
+`TERM=dumb`, or when `NO_COLOR` is set.
+
+## First run
+
+```sh
+make doctor
+make quick
+make dev
+```
+
+`doctor` reports required tools and optional LLVM/Docker capabilities. `quick`
+runs the focused compiler and runtime suite. `dev` runs the full Debug suite,
+installed consumers, examples, and the byte-for-byte generated-header check.
+
+The equivalent direct commands remain supported:
+
+```sh
+cmake --preset dev
+cmake --build --preset dev
+ctest --preset dev
+cmake --build --preset dev --target check-generated
+```
+
+## Command groups
+
+| Goal | Command |
+|---|---|
+| Focused development loop | `make quick` |
+| Full Debug validation | `make dev` |
+| Full Release validation | `make release` |
+| ASan and UBSan | `make sanitizers` |
+| Runtime-only strict C++20 | `make compiler-off` |
+| Exceptions and RTTI disabled | `make no-exceptions-rtti` |
+| All portable local gates | `make verify` |
+| Extended LLVM/fuzz local matrix | `make verify-all` |
+| Canonical generated-byte check | `make generated-check` |
+| Upstream LLVM full suite | `make llvm-dev` |
+| RealtimeSanitizer smoke | `make rtsan` |
+| Three bounded libFuzzer runs | `make fuzz-smoke` |
+| Benchmark harness smoke | `make bench-smoke` |
+| Local install | `make install` |
+| Runtime-only install | `make install-runtime` |
+| Native-architecture Linux smoke | `make linux-smoke` |
+
+`verify` and `verify-all` are local evidence only. The extended target requires
+upstream LLVM with libFuzzer and RealtimeSanitizer support. Neither target
+replaces the required hosted Linux compiler matrix, Windows job, or Linux
+libFuzzer run.
+
+## Overrides
+
+Make variables are ordinary command-line overrides:
+
+```sh
+make build PRESET=release JOBS=8
+make test PRESET=dev CTEST_ARGS='-R compiler.validation_'
+make install PREFIX="$PWD/out/feedforge"
+make validate PIPELINE=pipelines/all_messages.toml
+make pipeline-compile \
+  PIPELINE=examples/consumer-template/custom_pipeline.toml \
+  GENERATED_OUTPUT=build/manual/custom_events.hpp
+```
+
+Run `make variables` for the active high-value defaults. Lower-level overrides
+are `CMAKE_ARGS`, `BUILD_ARGS`, and `CTEST_ARGS`. `CMAKE_ARGS` accepts cache and
+configure options that preserve the selected preset's source and build tree;
+`-B`, `-S`, and `--preset` are rejected to prevent split configure/build paths.
+
+## Mutation guards
+
+Commands that rewrite source or remove output trees require a literal token:
+
+```sh
+make generated-refresh CONFIRM=regenerate
+make format-changed CONFIRM=format
+make clobber CONFIRM=clobber
+```
+
+`generated-refresh` additionally refuses to overwrite already modified
+canonical headers unless `FORCE=1` is supplied after review. It regenerates only
+through `feedforgec`, runs `check-generated`, and never stages files. `clobber`
+removes only the ignored `build/` and `out/` trees, refuses symlinked roots, and
+will not run while the private holdout or benchmark result archive is present.
+One-off generation commands reject traversal, symlink, and absolute paths that
+resolve outside `build/`.
+
+## LLVM and fuzzing
+
+Set `LLVM_CXX` to select an upstream compiler explicitly. On Homebrew systems,
+the wrapper discovers keg-only LLVM automatically.
+
+```sh
+make llvm-dev
+make llvm-sanitizers
+make rtsan
+make fuzz-smoke FUZZ_SECONDS=30
+```
+
+`make tidy` uses the same upstream LLVM compilation database and writes its
+full advisory report to ignored `out/tidy/clang-tidy.log`, while the terminal
+shows only the diagnostic counts.
+
+Fuzzing always uses generated build-tree seed corpora. New corpus entries and
+failure artifacts go under ignored `out/fuzz/`; reviewed fixture sources and
+committed generated headers are never mutated. macOS defaults to
+`ASAN_OPTIONS=detect_leaks=0` because the Darwin libFuzzer runtime retains its
+RSS monitor thread at shutdown. Linux retains leak detection.
+
+## Benchmark discipline
+
+Smoke mode is always safe to run:
+
+```sh
+make bench-smoke
+```
+
+Full series collection requires an explicit label and immutable source ID, and
+refuses a non-empty output directory:
+
+```sh
+make bench-run \
+  BENCH_LABEL=candidate-01 \
+  BENCH_SOURCE_ID="$(git rev-parse HEAD)"
+```
+
+Comparison likewise requires explicit series paths and refuses to infer target
+IDs. Pass the predeclared targets, space-separated, in `BENCH_TARGETS`:
+
+```sh
+make bench-compare \
+  BENCH_BASELINE=build/bench/results/baseline/series.json \
+  BENCH_CANDIDATE=build/bench/results/candidate/series.json \
+  BENCH_TARGETS='decode_one/itch50_all/all_types'
+```
+
+The frozen workload, acceptance thresholds, holdout policy, and publication
+rules remain defined in [benchmarking.md](benchmarking.md).
+
+## Editor integration
+
+All shared presets export a compilation database. Point clangd at
+`build/dev/compile_commands.json`, or create an ignored root symlink:
+
+```sh
+ln -s build/dev/compile_commands.json compile_commands.json
+```
+
+`.clang-format` and `.clang-tidy` intentionally remain at the repository root
+because Clang tooling discovers them by walking parent directories. The other
+root files retained there are either required by SPEC or conventional project
+entry points; moving them would make the tree look different without making it
+simpler to use.
+
+`make linux-smoke` archives the Git-indexed working tree, including local edits,
+into an ephemeral Docker volume. The test container mounts that source volume
+read-only and places `build/` on tmpfs, so Docker Desktop and Colima do not need
+the repository path in their host-sharing configuration. Untracked files are
+intentionally excluded. When Docker reports daemon HTTP proxy settings, the
+test container receives the same values for package installation.
+
+The Docker platform follows the host architecture by default. Use an explicit
+override when emulation is intentional, for example
+`make linux-smoke DOCKER_PLATFORM=linux/amd64 LINUX_JOBS=2`; hosted Linux CI
+remains the release gate for x86-64.

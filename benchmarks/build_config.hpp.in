@@ -1,0 +1,30 @@
+#pragma once
+
+#include <string_view>
+
+namespace feedforge::benchmark::build_config {
+
+inline constexpr std::string_view build_type{
+    R"feedforge(@FEEDFORGE_BENCH_BUILD_TYPE@)feedforge"};
+inline constexpr std::string_view compiler_id{
+    R"feedforge(@FEEDFORGE_BENCH_COMPILER_ID@)feedforge"};
+inline constexpr std::string_view compiler_version{
+    R"feedforge(@FEEDFORGE_BENCH_COMPILER_VERSION@)feedforge"};
+inline constexpr std::string_view compiler_path{
+    R"feedforge(@FEEDFORGE_BENCH_COMPILER_PATH@)feedforge"};
+inline constexpr std::string_view generator{
+    R"feedforge(@FEEDFORGE_BENCH_GENERATOR@)feedforge"};
+inline constexpr std::string_view config_flags{
+    R"feedforge(@FEEDFORGE_BENCH_CONFIG_FLAGS@)feedforge"};
+inline constexpr std::string_view target_flags{
+    R"feedforge(@FEEDFORGE_BENCH_TARGET_FLAGS@)feedforge"};
+inline constexpr std::string_view system_name{
+    R"feedforge(@FEEDFORGE_BENCH_SYSTEM_NAME@)feedforge"};
+inline constexpr std::string_view system_processor{
+    R"feedforge(@FEEDFORGE_BENCH_SYSTEM_PROCESSOR@)feedforge"};
+inline constexpr std::string_view interprocedural_optimization{
+    R"feedforge(@FEEDFORGE_BENCH_IPO@)feedforge"};
+inline constexpr std::string_view fixture_directory{
+    R"feedforge(@FEEDFORGE_BENCH_FIXTURE_DIR@)feedforge"};
+
+}  // namespace feedforge::benchmark::build_config

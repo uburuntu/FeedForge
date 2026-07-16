@@ -1,0 +1,52 @@
+format_version = 1
+message_type = "R"
+message_name = "stock_directory"
+spec_section = "1.2.1"
+spec_pages = [5, 6, 7, 8]
+author = "schema-author-agent"
+reviewer = "schema-review-agent"
+review_date = "2026-07-14"
+review_status = "approved"
+byte_source = "hand-authored from the cited official field table; not schema-generated"
+raw_hex = "52 01 02 03 04 00 00 05 06 07 08 54 45 53 54 20 20 20 20 51 4e 00 00 00 64 4e 43 43 20 50 4e 4e 31 4e 00 00 00 00 4e"
+raw_size = 39
+
+[negative.size_minus_one]
+derivation = "remove final byte from raw_hex"
+size = 38
+expected_error = "invalid_message_size"
+
+[negative.size_plus_one]
+derivation = "append 00 to raw_hex"
+size = 40
+expected_error = "invalid_message_size"
+
+[expected_fields]
+message_type = "R"
+stock_locate = 258
+tracking_number = 772
+timestamp = 84281096
+stock = "TEST    "
+market_category = "Q"
+financial_status_indicator = "N"
+round_lot_size = 100
+round_lots_only = "N"
+issue_classification = "C"
+issue_sub_type = "C "
+authenticity = "P"
+short_sale_threshold_indicator = "N"
+ipo_flag = "N"
+luld_reference_price_tier = "1"
+etp_flag = "N"
+etp_leverage_factor = 0
+inverse_indicator = "N"
+
+[expected_all_messages]
+result = "emit"
+event = "stock_directory"
+fields = ["stock_locate", "tracking_number", "timestamp", "stock", "market_category", "financial_status_indicator", "round_lot_size", "round_lots_only", "issue_classification", "issue_sub_type", "authenticity", "short_sale_threshold_indicator", "ipo_flag", "luld_reference_price_tier", "etp_flag", "etp_leverage_factor", "inverse_indicator"]
+
+[expected_order_events]
+result = "skip"
+event = ""
+fields = []

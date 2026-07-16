@@ -1,0 +1,99 @@
+format_version = 1
+name = "test_feed"
+protocol_version = "1.0"
+document_revision = "2026-07-14"
+wire_endian = "big"
+discriminator_offset = 0
+discriminator_width = 1
+description = "Small complete compiler fixture"
+
+[[types]]
+name = "price_4"
+kind = "uint"
+width = 4
+logical = "decimal"
+scale = 4
+
+[[messages]]
+name = "add_order"
+type = "A"
+size = 9
+spec_section = "fixture"
+spec_page = 1
+
+[[messages.fields]]
+name = "message_type"
+type = "alpha"
+offset = 0
+width = 1
+role = "discriminator"
+value = "A"
+
+[[messages.fields]]
+name = "order_id"
+type = "u16"
+offset = 1
+width = 2
+
+[[messages.fields]]
+name = "price"
+type = "price_4"
+offset = 3
+width = 4
+
+[[messages.fields]]
+name = "side"
+type = "alpha"
+offset = 7
+width = 1
+allowed = ["B", "S"]
+
+[[messages.fields]]
+name = "padding"
+type = "reserved"
+offset = 8
+width = 1
+
+[[messages]]
+name = "order_update"
+type = "U"
+size = 4
+
+[[messages.fields]]
+name = "message_type"
+type = "alpha"
+offset = 0
+width = 1
+role = "discriminator"
+value = "U"
+
+[[messages.fields]]
+name = "quantity"
+type = "u16"
+offset = 1
+width = 2
+
+[[messages.fields]]
+name = "code"
+type = "alpha"
+offset = 3
+width = 1
+
+[[messages]]
+name = "heartbeat"
+type = "H"
+size = 2
+
+[[messages.fields]]
+name = "message_type"
+type = "alpha"
+offset = 0
+width = 1
+role = "discriminator"
+value = "H"
+
+[[messages.fields]]
+name = "status"
+type = "alpha"
+offset = 1
+width = 1

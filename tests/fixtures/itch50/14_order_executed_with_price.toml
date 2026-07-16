@@ -1,0 +1,43 @@
+format_version = 1
+message_type = "C"
+message_name = "order_executed_with_price"
+spec_section = "1.4.2"
+spec_pages = [14, 15]
+author = "schema-author-agent"
+reviewer = "schema-review-agent"
+review_date = "2026-07-14"
+review_status = "approved"
+byte_source = "hand-authored from the cited official field table; not schema-generated"
+raw_hex = "43 01 02 03 04 00 00 05 06 07 08 00 00 00 00 00 00 00 11 00 00 00 22 00 00 00 00 00 00 00 33 59 00 01 e2 40"
+raw_size = 36
+
+[negative.size_minus_one]
+derivation = "remove final byte from raw_hex"
+size = 35
+expected_error = "invalid_message_size"
+
+[negative.size_plus_one]
+derivation = "append 00 to raw_hex"
+size = 37
+expected_error = "invalid_message_size"
+
+[expected_fields]
+message_type = "C"
+stock_locate = 258
+tracking_number = 772
+timestamp = 84281096
+order_reference_number = 17
+executed_shares = 34
+match_number = 51
+printable = "Y"
+execution_price = 123456
+
+[expected_all_messages]
+result = "emit"
+event = "order_executed_with_price"
+fields = ["stock_locate", "tracking_number", "timestamp", "order_reference_number", "executed_shares", "match_number", "printable", "execution_price"]
+
+[expected_order_events]
+result = "emit"
+event = "order_executed_with_price"
+fields = ["stock_locate", "timestamp", "order_reference_number", "executed_shares", "match_number", "printable", "execution_price"]

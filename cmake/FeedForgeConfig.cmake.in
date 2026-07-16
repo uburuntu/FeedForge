@@ -1,0 +1,21 @@
+@PACKAGE_INIT@
+
+set_and_check(
+  FeedForge_SCHEMA_DIR
+  "@PACKAGE_CMAKE_INSTALL_DATADIR@/feedforge/schemas"
+)
+# Optional package data must not become a canonical runtime dependency.
+set(
+  FeedForge_DOC_DIR
+  "@PACKAGE_CMAKE_INSTALL_DATADIR@/doc/feedforge"
+)
+set(
+  FeedForge_SKILL_DIR
+  "@PACKAGE_CMAKE_INSTALL_DATADIR@/feedforge/skills"
+)
+
+include("${CMAKE_CURRENT_LIST_DIR}/FeedForgeTargets.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/FeedForgeGenerate.cmake")
+
+check_required_components(FeedForge)
+

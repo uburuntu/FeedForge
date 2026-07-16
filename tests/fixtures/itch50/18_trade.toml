@@ -1,0 +1,44 @@
+format_version = 1
+message_type = "P"
+message_name = "trade"
+spec_section = "1.5.1"
+spec_pages = [16, 17]
+author = "schema-author-agent"
+reviewer = "schema-review-agent"
+review_date = "2026-07-14"
+review_status = "approved"
+byte_source = "hand-authored from the cited official field table; not schema-generated"
+raw_hex = "50 01 02 03 04 00 00 05 06 07 08 00 00 00 00 00 00 00 00 42 00 00 00 22 54 45 53 54 20 20 20 20 00 01 e2 40 00 00 00 00 00 00 00 33"
+raw_size = 44
+
+[negative.size_minus_one]
+derivation = "remove final byte from raw_hex"
+size = 43
+expected_error = "invalid_message_size"
+
+[negative.size_plus_one]
+derivation = "append 00 to raw_hex"
+size = 45
+expected_error = "invalid_message_size"
+
+[expected_fields]
+message_type = "P"
+stock_locate = 258
+tracking_number = 772
+timestamp = 84281096
+order_reference_number = 0
+buy_sell_indicator = "B"
+shares = 34
+stock = "TEST    "
+price = 123456
+match_number = 51
+
+[expected_all_messages]
+result = "emit"
+event = "trade"
+fields = ["stock_locate", "tracking_number", "timestamp", "order_reference_number", "buy_sell_indicator", "shares", "stock", "price", "match_number"]
+
+[expected_order_events]
+result = "emit"
+event = "trade"
+fields = ["stock_locate", "timestamp", "order_reference_number", "buy_sell_indicator", "shares", "stock", "price", "match_number"]

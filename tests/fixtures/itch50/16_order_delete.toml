@@ -1,0 +1,39 @@
+format_version = 1
+message_type = "D"
+message_name = "order_delete"
+spec_section = "1.4.4"
+spec_pages = [15]
+author = "schema-author-agent"
+reviewer = "schema-review-agent"
+review_date = "2026-07-14"
+review_status = "approved"
+byte_source = "hand-authored from the cited official field table; not schema-generated"
+raw_hex = "44 01 02 03 04 00 00 05 06 07 08 00 00 00 00 00 00 00 11"
+raw_size = 19
+
+[negative.size_minus_one]
+derivation = "remove final byte from raw_hex"
+size = 18
+expected_error = "invalid_message_size"
+
+[negative.size_plus_one]
+derivation = "append 00 to raw_hex"
+size = 20
+expected_error = "invalid_message_size"
+
+[expected_fields]
+message_type = "D"
+stock_locate = 258
+tracking_number = 772
+timestamp = 84281096
+order_reference_number = 17
+
+[expected_all_messages]
+result = "emit"
+event = "order_delete"
+fields = ["stock_locate", "tracking_number", "timestamp", "order_reference_number"]
+
+[expected_order_events]
+result = "emit"
+event = "order_delete"
+fields = ["stock_locate", "timestamp", "order_reference_number"]
