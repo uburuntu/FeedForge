@@ -29,10 +29,10 @@ static_assert(has_tracking_number<all_messages::add_order>);
 static_assert(!has_tracking_number<order_events::add_order>);
 static_assert(has_attribution<order_events::add_order_mpid>);
 static_assert(!has_attribution<order_events::add_order>);
-static_assert(all_messages::pipeline_metadata::required_runtime_api_version == std::uint32_t{1U});
-static_assert(order_events::pipeline_metadata::required_runtime_api_version == std::uint32_t{1U});
-static_assert(all_messages::pipeline_metadata::generator_version == std::string_view{"0.1.0"});
-static_assert(order_events::pipeline_metadata::generator_version == std::string_view{"0.1.0"});
+static_assert(all_messages::pipeline_metadata::required_runtime_api_version == std::uint32_t{2U});
+static_assert(order_events::pipeline_metadata::required_runtime_api_version == std::uint32_t{2U});
+static_assert(all_messages::pipeline_metadata::generator_version == std::string_view{"0.2.0"});
+static_assert(order_events::pipeline_metadata::generator_version == std::string_view{"0.2.0"});
 
 template <class Event> void print_layout() noexcept {
   std::printf("%zu:%zu;", sizeof(Event), alignof(Event));

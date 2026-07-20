@@ -144,6 +144,26 @@ For real BinaryFILE input, load or map the file before replay and keep its byte
 span alive for the entire call. An event reference is valid only during its sink
 overload; copy the owning event if it must survive the callback.
 
+For input delivered in pieces, construct the generated namespace's
+`chunked_replayer` with caller-owned scratch and the same sink. A 65,535-byte
+scratch span accepts every BinaryFILE payload length; a smaller span is a
+deliberate application bound and reports `insufficient_scratch` when exceeded.
+Push each non-owning chunk in order, then call `finish()` exactly once when no
+more bytes will arrive:
+
+```cpp
+std::array<std::byte, 65'535U> scratch{};
+events::chunked_replayer<sink> replay{scratch, destination};
+for (std::span<const std::byte> chunk : chunks) {
+  static_cast<void>(replay.push(chunk));
+}
+const feedforge::replay_summary result = replay.finish();
+```
+
+The scratch span and sink must outlive the adapter, and pushed chunks must not
+overlap scratch. With sufficient scratch, terminal results, counters, offsets,
+event order, and stop behavior match `replay_binary_file()`.
+
 ## Package, FetchContent, and subdirectory acquisition
 
 An installed config package is the shortest and most reproducible integration

@@ -7,7 +7,7 @@
 #include <cstdint>
 
 static_assert(CHAR_BIT == 8, "FeedForge requires eight-bit bytes");
-static_assert(sizeof(void*) == 8, "FeedForge v0.1 requires a 64-bit host");
+static_assert(sizeof(void*) == 8, "FeedForge requires a 64-bit host");
 static_assert(sizeof(std::size_t) <= sizeof(std::uint64_t),
               "FeedForge offsets require size_t to fit in uint64_t");
 static_assert(sizeof(std::uint8_t) == 1, "FeedForge requires an 8-bit uint8_t");

@@ -63,7 +63,14 @@ Do not rely on a catch-all function template for production adoption: it can sat
 
 ## 5. Replay and classify the result
 
-Load or map the BinaryFILE first, then pass a `std::span<const std::byte>` to the generated namespace's `replay_binary_file()`.
+Load or map a complete BinaryFILE first, then pass a
+`std::span<const std::byte>` to the generated namespace's
+`replay_binary_file()`. For incrementally delivered input, construct
+`chunked_replayer<Sink>` with caller-owned scratch, push chunks in order, and
+call `finish()` only when no more bytes will arrive. The scratch and sink must
+outlive the adapter; chunks must not overlap scratch. Use 65,535 bytes of
+scratch for full BinaryFILE payload-length equivalence or treat a smaller span
+as an explicit application bound.
 
 - `complete` means a zero-length end marker was consumed with no trailing byte.
 - `incomplete` means clean exhaustion at a frame boundary without that marker.
@@ -81,8 +88,10 @@ From a separate consumer build directory:
 2. Build the consumer as C++20.
 3. Run a valid empty complete BinaryFILE (`00 00`) and at least one selected fixture.
 4. Exercise incomplete, framing-error, decode-error, and sink-stop handling.
-5. For a canonical package, repeat with `FEEDFORGE_BUILD_COMPILER=OFF`.
-6. Inspect exported interface properties if packaging changes: canonical targets must not export project warning/link flags or third-party libraries.
+5. If input is chunked, split prefixes and payloads and verify the terminal
+   result matches one-shot replay.
+6. For a canonical package, repeat with `FEEDFORGE_BUILD_COMPILER=OFF`.
+7. Inspect exported interface properties if packaging changes: canonical targets must not export project warning/link flags or third-party libraries.
 
 Use the command checklist in [reference.md](reference.md).
 

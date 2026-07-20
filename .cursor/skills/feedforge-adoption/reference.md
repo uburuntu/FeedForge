@@ -119,7 +119,12 @@ The generated `events::sink_for_all_selected_events<Sink>` concept rejects:
 
 `feedforge::flow::continue_` continues replay. `feedforge::flow::stop` delivers the current event, counts it as emitted, and then returns a non-error stopped result.
 
-The payload span lives through `decode_one()`. The BinaryFILE span lives through `replay_binary_file()`. A generated event owns all projected field values, but the `const&` passed to the sink lives only for that call. Copy the event, not its reference, if it must outlive the callback.
+The payload span lives through `decode_one()`. The BinaryFILE span lives through
+`replay_binary_file()`. A chunk passed to `chunked_replayer::push()` lives
+through that call; the scratch span and sink live through the adapter. A
+generated event owns all projected field values, but the `const&` passed to the
+sink lives only for that call. Copy the event, not its reference, if it must
+outlive the callback.
 
 ## Value representations
 
@@ -162,6 +167,14 @@ Do not convert a decimal to floating point implicitly or treat a timestamp as a 
 | `decode_error` | Inspect `decode_error` and `error_offset` |
 
 Strict replay rejects a one-byte length prefix, truncated payload, and any byte after an end marker. It stops at the first error or sink stop.
+
+For arbitrary chunk boundaries, construct
+`events::chunked_replayer<Sink>{scratch, sink}`, call `push(chunk)` in order,
+and call `finish()` at end of input. A zero marker remains provisional until
+finish so later trailing data is still rejected. Scratch smaller than a
+declared payload produces `framing_errc::insufficient_scratch`; 65,535 bytes
+accepts the complete BinaryFILE length domain. With sufficient scratch, the
+terminal summary and delivered event sequence match one-shot replay.
 
 ## Install/build/run checklist
 

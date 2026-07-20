@@ -166,8 +166,8 @@ struct wrong_result_sink {
 static_assert(feedforge::sink_for<accepting_sink, test_event>);
 static_assert(!feedforge::sink_for<throwing_sink, test_event>);
 static_assert(!feedforge::sink_for<wrong_result_sink, test_event>);
-static_assert(feedforge::runtime_api_version == 1);
-static_assert(feedforge::version_string == "0.1.0");
+static_assert(feedforge::runtime_api_version == 2);
+static_assert(feedforge::version_string == "0.2.0");
 
 }  // namespace
 

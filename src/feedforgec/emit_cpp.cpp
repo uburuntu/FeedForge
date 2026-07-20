@@ -17,7 +17,7 @@
 namespace feedforge::compiler {
 namespace {
 
-inline constexpr std::uint32_t required_runtime_api_version = 1U;
+inline constexpr std::uint32_t required_runtime_api_version = 2U;
 
 [[nodiscard]] diagnostic emitter_problem(
     std::string object_path, std::string message,
@@ -41,6 +41,7 @@ inline constexpr std::uint32_t required_runtime_api_version = 1U;
     const std::string_view identifier) {
   constexpr std::array declarations{
       std::string_view{"basic_decoder"},
+      std::string_view{"chunked_replayer"},
       std::string_view{"decoder"},
       std::string_view{"pipeline_metadata"},
       std::string_view{"sink_for_all_selected_events"},
@@ -205,9 +206,8 @@ inline constexpr std::uint32_t required_runtime_api_version = 1U;
         "unknown message policy must be error or skip"));
   }
   if (ir.pipeline.unselected_messages != "skip") {
-    return std::unexpected(emitter_problem(
-        "ffir.pipeline.unselected_messages",
-        "unselected message policy must be skip in v0.1"));
+    return std::unexpected(emitter_problem("ffir.pipeline.unselected_messages",
+                                           "unselected message policy must be skip"));
   }
   if (ir.pipeline.cpp_namespace.empty()) {
     return std::unexpected(emitter_problem(
@@ -1199,6 +1199,146 @@ void append_replay(std::string& output, const ffir_v1& ir) {
   append_line(output, 0U);
 }
 
+void append_chunked_replay(std::string& output) {
+  append_line(output, 0U, "template <class Sink>");
+  append_line(output, 1U, "requires sink_for_all_selected_events<Sink>");
+  append_line(output, 0U, "class chunked_replayer {");
+  append_line(output, 0U, " public:");
+  append_line(output, 1U, "explicit chunked_replayer(");
+  append_line(output, 3U, "std::span<std::byte> scratch, Sink& sink) noexcept");
+  append_line(output, 2U, ": cursor_(scratch), sink_(sink) {");
+  append_line(output, 2U, "summary_.status = feedforge::replay_status::incomplete;");
+  append_line(output, 1U, "}");
+  append_line(output, 0U);
+  append_line(output, 1U, "chunked_replayer(const chunked_replayer&) = delete;");
+  append_line(output, 1U, "chunked_replayer& operator=(const chunked_replayer&) = delete;");
+  append_line(output, 1U, "chunked_replayer(chunked_replayer&&) = delete;");
+  append_line(output, 1U, "chunked_replayer& operator=(chunked_replayer&&) = delete;");
+  append_line(output, 0U);
+  append_line(output, 1U, "[[nodiscard]] feedforge::replay_summary push(");
+  append_line(output, 3U, "std::span<const std::byte> chunk) noexcept {");
+  append_line(output, 2U, "if (terminal_) {");
+  append_line(output, 3U, "return summary_;");
+  append_line(output, 2U, "}");
+  append_line(output, 0U);
+  append_line(output, 2U, "std::size_t position{};");
+  append_line(output, 2U, "while (position != chunk.size()) {");
+  append_line(output, 3U, "const feedforge::chunk_frame_outcome frame =");
+  append_line(output, 5U, "cursor_.next(chunk.subspan(position));");
+  append_line(output, 3U, "position += frame.input_consumed;");
+  append_line(output, 3U, "summary_.bytes_consumed = cursor_.consumed();");
+  append_line(output, 3U, "switch (frame.status) {");
+  append_line(output, 4U, "case feedforge::chunk_frame_status::frame:");
+  append_line(output, 5U, "if (!decode_frame(frame.frame)) {");
+  append_line(output, 6U, "return summary_;");
+  append_line(output, 5U, "}");
+  append_line(output, 5U, "break;");
+  append_line(output, 4U, "case feedforge::chunk_frame_status::needs_input:");
+  append_line(output, 5U, "return summary_;");
+  append_line(output, 4U, "case feedforge::chunk_frame_status::complete:");
+  append_line(output, 5U, "summary_.status = feedforge::replay_status::complete;");
+  append_line(output, 5U, "terminal_ = true;");
+  append_line(output, 5U, "return summary_;");
+  append_line(output, 4U, "case feedforge::chunk_frame_status::incomplete:");
+  append_line(output, 5U, "summary_.status = feedforge::replay_status::incomplete;");
+  append_line(output, 5U, "terminal_ = true;");
+  append_line(output, 5U, "return summary_;");
+  append_line(output, 4U, "case feedforge::chunk_frame_status::error:");
+  append_line(output, 5U, "set_framing_error(frame);");
+  append_line(output, 5U, "return summary_;");
+  append_line(output, 3U, "}");
+  append_line(output, 2U, "}");
+  append_line(output, 2U, "return summary_;");
+  append_line(output, 1U, "}");
+  append_line(output, 0U);
+  append_line(output, 1U, "[[nodiscard]] feedforge::replay_summary finish() noexcept {");
+  append_line(output, 2U, "if (terminal_) {");
+  append_line(output, 3U, "return summary_;");
+  append_line(output, 2U, "}");
+  append_line(output, 2U, "const feedforge::chunk_frame_outcome frame = cursor_.finish();");
+  append_line(output, 2U, "summary_.bytes_consumed = cursor_.consumed();");
+  append_line(output, 2U, "switch (frame.status) {");
+  append_line(output, 3U, "case feedforge::chunk_frame_status::frame:");
+  append_line(output, 4U, "static_cast<void>(decode_frame(frame.frame));");
+  append_line(output, 4U, "return summary_;");
+  append_line(output, 3U, "case feedforge::chunk_frame_status::needs_input:");
+  append_line(output, 4U, "return summary_;");
+  append_line(output, 3U, "case feedforge::chunk_frame_status::complete:");
+  append_line(output, 4U, "summary_.status = feedforge::replay_status::complete;");
+  append_line(output, 4U, "terminal_ = true;");
+  append_line(output, 4U, "return summary_;");
+  append_line(output, 3U, "case feedforge::chunk_frame_status::incomplete:");
+  append_line(output, 4U, "summary_.status = feedforge::replay_status::incomplete;");
+  append_line(output, 4U, "terminal_ = true;");
+  append_line(output, 4U, "return summary_;");
+  append_line(output, 3U, "case feedforge::chunk_frame_status::error:");
+  append_line(output, 4U, "set_framing_error(frame);");
+  append_line(output, 4U, "return summary_;");
+  append_line(output, 2U, "}");
+  append_line(output, 2U, "return summary_;");
+  append_line(output, 1U, "}");
+  append_line(output, 0U);
+  append_line(output, 1U,
+              "[[nodiscard]] feedforge::replay_summary summary() const "
+              "noexcept {");
+  append_line(output, 2U, "return summary_;");
+  append_line(output, 1U, "}");
+  append_line(output, 0U);
+  append_line(output, 0U, " private:");
+  append_line(output, 1U, "[[nodiscard]] bool decode_frame(");
+  append_line(output, 3U, "const feedforge::frame_view& frame) noexcept {");
+  append_line(output, 2U, "++summary_.frames_seen;");
+  append_line(output, 2U, "const feedforge::decode_outcome outcome =");
+  append_line(output, 4U, "message_decoder_.decode_one(frame.payload, sink_);");
+  append_line(output, 2U, "if (outcome.status == feedforge::decode_status::emitted) {");
+  append_line(output, 3U, "++summary_.events_emitted;");
+  append_line(output, 3U, "return true;");
+  append_line(output, 2U, "}");
+  append_line(output, 2U,
+              "if (outcome.status == "
+              "feedforge::decode_status::known_unselected_skipped) {");
+  append_line(output, 3U, "++summary_.known_messages_skipped;");
+  append_line(output, 3U, "return true;");
+  append_line(output, 2U, "}");
+  append_line(output, 2U,
+              "if (outcome.status == "
+              "feedforge::decode_status::unknown_skipped) {");
+  append_line(output, 3U, "++summary_.unknown_messages_skipped;");
+  append_line(output, 3U, "return true;");
+  append_line(output, 2U, "}");
+  append_line(output, 2U, "if (outcome.status == feedforge::decode_status::stopped) {");
+  append_line(output, 3U, "++summary_.events_emitted;");
+  append_line(output, 3U, "summary_.status = feedforge::replay_status::stopped;");
+  append_line(output, 2U, "} else {");
+  append_line(output, 3U, "summary_.status = feedforge::replay_status::decode_error;");
+  append_line(output, 3U,
+              "summary_.error_offset = "
+              "static_cast<std::size_t>(frame.file_offset) + 2U;");
+  append_line(output, 3U, "summary_.decode_error = outcome;");
+  append_line(output, 2U, "}");
+  append_line(output, 2U, "terminal_ = true;");
+  append_line(output, 2U, "return false;");
+  append_line(output, 1U, "}");
+  append_line(output, 0U);
+  append_line(output, 1U, "void set_framing_error(");
+  append_line(output, 3U, "const feedforge::chunk_frame_outcome& frame) noexcept {");
+  append_line(output, 2U, "summary_.status = feedforge::replay_status::framing_error;");
+  append_line(output, 2U,
+              "summary_.error_offset = "
+              "static_cast<std::size_t>(frame.offset);");
+  append_line(output, 2U, "summary_.framing_error = frame.error;");
+  append_line(output, 2U, "terminal_ = true;");
+  append_line(output, 1U, "}");
+  append_line(output, 0U);
+  append_line(output, 1U, "feedforge::chunked_binary_file_cursor cursor_;");
+  append_line(output, 1U, "decoder message_decoder_{};");
+  append_line(output, 1U, "Sink& sink_;");
+  append_line(output, 1U, "feedforge::replay_summary summary_{};");
+  append_line(output, 1U, "bool terminal_{};");
+  append_line(output, 0U, "};");
+  append_line(output, 0U);
+}
+
 void append_footer(std::string& output, const ffir_v1& ir) {
   append_line(output, 0U,
               "}  // namespace " + ir.pipeline.cpp_namespace);
@@ -1220,6 +1360,7 @@ result<std::string> emit_cpp(const ffir_v1& ir) {
   append_events(output, ir);
   append_decoder(output, ir);
   append_replay(output, ir);
+  append_chunked_replay(output);
   append_footer(output, ir);
   return output;
 }

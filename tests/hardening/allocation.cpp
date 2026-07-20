@@ -269,6 +269,21 @@ void check_replay_paths() {
   FEEDFORGE_CHECK(stopped.status == feedforge::replay_status::stopped);
   FEEDFORGE_CHECK(stopped.frames_seen == 1U && stopped.events_emitted == 1U);
   FEEDFORGE_CHECK(stopped_sink.calls == 1U);
+
+  std::array<std::byte, add_order_payload.size()> scratch{};
+  noop_sink chunked_sink;
+  allocation_probe::begin();
+  order_events::chunked_replayer<noop_sink> chunked{scratch, chunked_sink};
+  for (std::size_t index = 0U; index < add_order_complete.size(); ++index) {
+    static_cast<void>(
+        chunked.push(std::span<const std::byte>{add_order_complete}.subspan(index, 1U)));
+  }
+  const auto chunked_complete = chunked.finish();
+  const std::size_t chunked_allocations = allocation_probe::end();
+  FEEDFORGE_CHECK(chunked_allocations == 0U);
+  FEEDFORGE_CHECK(chunked_complete.status == feedforge::replay_status::complete);
+  FEEDFORGE_CHECK(chunked_complete.frames_seen == 1U && chunked_complete.events_emitted == 1U);
+  FEEDFORGE_CHECK(chunked_sink.calls == 1U);
 }
 
 } // namespace

@@ -13,12 +13,15 @@ namespace generated = feedforge::generated::nasdaq::itch50_all;
 
 struct observing_noop_sink {
   std::uint64_t calls{};
+  std::uint64_t type_digest{1469598103934665603ULL};
   std::byte last_type{};
   bool stop{};
 
   template <class Event> feedforge::flow operator()(const Event&) noexcept {
     ++calls;
     last_type = Event::source_discriminator;
+    type_digest ^= std::to_integer<std::uint64_t>(last_type);
+    type_digest *= 1099511628211ULL;
     return stop ? feedforge::flow::stop : feedforge::flow::continue_;
   }
 };
@@ -28,6 +31,7 @@ static_assert(generated::sink_for_all_selected_events<observing_noop_sink>);
 struct observation {
   feedforge::replay_summary summary{};
   std::uint64_t sink_calls{};
+  std::uint64_t type_digest{};
   std::byte last_type{};
 };
 
@@ -49,9 +53,45 @@ struct observation {
 }
 
 [[nodiscard]] observation replay(const std::span<const std::byte> input, const bool stop) noexcept {
-  observing_noop_sink sink{0U, std::byte{0U}, stop};
+  observing_noop_sink sink{0U, 1469598103934665603ULL, std::byte{0U}, stop};
   const feedforge::replay_summary summary = generated::replay_binary_file(input, sink);
-  return observation{summary, sink.calls, sink.last_type};
+  return observation{summary, sink.calls, sink.type_digest, sink.last_type};
+}
+
+[[nodiscard]] observation replay_chunked(const std::span<const std::byte> input, const bool stop,
+                                         const bool one_byte_chunks) noexcept {
+  std::array<std::byte, 65'535U> scratch;
+  observing_noop_sink sink{0U, 1469598103934665603ULL, std::byte{0U}, stop};
+  generated::chunked_replayer<observing_noop_sink> replay{scratch, sink};
+
+  std::uint32_t state = 0x9e3779b9U;
+  for (const std::byte value : input) {
+    state ^= std::to_integer<std::uint32_t>(value) + 0x9e3779b9U + (state << 6U) + (state >> 2U);
+  }
+
+  std::size_t position{};
+  while (position != input.size()) {
+    state = state * 1664525U + 1013904223U;
+    if (!one_byte_chunks && (state & 7U) == 0U) {
+      static_cast<void>(replay.push({}));
+    }
+    const std::size_t requested = one_byte_chunks ? 1U : 1U + static_cast<std::size_t>(state % 31U);
+    const std::size_t remaining = input.size() - position;
+    const std::size_t count = requested < remaining ? requested : remaining;
+    static_cast<void>(replay.push(input.subspan(position, count)));
+    position += count;
+  }
+
+  const feedforge::replay_summary summary = replay.finish();
+  return observation{summary, sink.calls, sink.type_digest, sink.last_type};
+}
+
+void require_same_observation(const observation& actual, const observation& expected) noexcept {
+  using feedforge::fuzz::require;
+  require(same_summary(actual.summary, expected.summary));
+  require(actual.sink_calls == expected.sink_calls);
+  require(actual.type_digest == expected.type_digest);
+  require(actual.last_type == expected.last_type);
 }
 
 void require_default_error_fields(const feedforge::replay_summary& summary) noexcept {
@@ -122,7 +162,10 @@ void exercise_replay(const std::span<const std::byte> input) noexcept {
   validate(input, second, false);
   require(same_summary(first.summary, second.summary));
   require(first.sink_calls == second.sink_calls);
+  require(first.type_digest == second.type_digest);
   require(first.last_type == second.last_type);
+  require_same_observation(replay_chunked(input, false, true), first);
+  require_same_observation(replay_chunked(input, false, false), first);
 
   const observation stopped_first = replay(input, true);
   const observation stopped_second = replay(input, true);
@@ -130,7 +173,10 @@ void exercise_replay(const std::span<const std::byte> input) noexcept {
   validate(input, stopped_second, true);
   require(same_summary(stopped_first.summary, stopped_second.summary));
   require(stopped_first.sink_calls == stopped_second.sink_calls);
+  require(stopped_first.type_digest == stopped_second.type_digest);
   require(stopped_first.last_type == stopped_second.last_type);
+  require_same_observation(replay_chunked(input, true, true), stopped_first);
+  require_same_observation(replay_chunked(input, true, false), stopped_first);
 }
 
 } // namespace

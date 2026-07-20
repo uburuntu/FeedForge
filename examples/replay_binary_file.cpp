@@ -45,7 +45,9 @@ namespace order_events =
       return "truncated_payload";
     case trailing_data_after_end_marker:
       return "trailing_data_after_end_marker";
-  }
+    case insufficient_scratch:
+      return "insufficient_scratch";
+    }
   return "unknown";
 }
 

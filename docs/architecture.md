@@ -40,7 +40,7 @@ combinations, complete byte coverage, discriminator placement, field bounds,
 and overlap, then produces resolved schema data. It does not select output
 events or emit C++.
 
-All input is untrusted. For the checked v0.1 design, exact message size is
+All input is untrusted. For the checked design, exact message size is
 established before any projected field load. Allowed-value metadata documents
 known codes; it does not make a structurally valid message fail because an
 exchange introduced a new code.
@@ -92,19 +92,27 @@ The runtime is protocol- and pipeline-independent. It supplies:
 - owning value types such as `timestamp_ns`, `decimal`, `ascii`, and strong
   integer identifiers;
 - `flow`, decode outcomes, and replay summaries;
-- the allocation-free, I/O-free `binary_file_cursor`;
+- the allocation-free, I/O-free `binary_file_cursor` and caller-buffered
+  `chunked_binary_file_cursor`;
 - sink and decoder-implementation concepts; and
 - the authoritative `profile::portable_checked` implementation.
 
 The runtime does not know schema message names, projected event sets, or user
 sinks. Generated events own decoded values; borrowed frame spans remain tied to
 the caller-owned input. Source compatibility is checked with
-`feedforge::runtime_api_version`; v0.1 does not promise a stable binary ABI.
+`feedforge::runtime_api_version`; FeedForge does not promise a stable binary
+ABI.
+
+The v0.2 chunked cursor carries only prefix, payload-progress, ordinal, and
+absolute-offset state between calls. Split payload bytes live in a caller-owned
+bounded scratch span. The generated `chunked_replayer` couples that protocol-
+independent cursor to the pipeline decoder and sink without adding I/O,
+allocation, or another implementation profile.
 
 ### Profiles and backend variants
 
 A profile is one cohesive implementation choice, not a public mix-and-match
-list of load, validation, dispatch, and delivery policies. v0.1 defines only
+list of load, validation, dispatch, and delivery policies. FeedForge defines only
 `feedforge::profile::portable_checked`, with variant ID
 `portable_checked.v1`: portable byte-assembly loads, exact-size validation,
 switch dispatch, and direct stack-event delivery.
@@ -117,7 +125,7 @@ event types, values, errors, skip/stop behavior, and sink order.
 
 ## Deliberate limits
 
-The v0.1 boundary excludes live networking, packet recovery, order-book or
+The project boundary excludes live networking, packet recovery, order-book or
 strategy logic, runtime schema parsing, runtime ISA selection, a second
 exchange protocol, computed pipeline fields, and user C++ injection. FeedForge
 validates and decodes an offline BinaryFILE workload; it does not certify data,

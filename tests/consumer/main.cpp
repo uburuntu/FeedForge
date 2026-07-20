@@ -29,7 +29,7 @@ static_assert(order_events::sink_for_all_selected_events<no_op_sink>);
 }  // namespace
 
 int main() {
-  static_assert(feedforge::runtime_api_version == 1);
+  static_assert(feedforge::runtime_api_version == 2);
   static_assert(all::pipeline_metadata::known_messages.size() == 23U);
   static_assert(order_events::pipeline_metadata::known_messages.size() == 23U);
 

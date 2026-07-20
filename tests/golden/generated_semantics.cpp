@@ -332,6 +332,35 @@ void test_replay_adapter() {
         "stopped replay includes stopping frame and ignores later byte");
 }
 
+void test_chunked_replay_adapter() {
+  constexpr std::array complete_add{
+      std::byte{0x00}, std::byte{0x09}, std::byte{'A'},  std::byte{0x12}, std::byte{0x34},
+      std::byte{0x00}, std::byte{0x01}, std::byte{0xe2}, std::byte{0x40}, std::byte{0xff},
+      std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+  };
+  std::array<std::byte, 9U> scratch{};
+  recording_sink sink;
+  generated::chunked_replayer<recording_sink> replay{scratch, sink};
+
+  for (std::size_t index = 0U; index < complete_add.size(); ++index) {
+    const auto interim = replay.push(std::span<const std::byte>{complete_add}.subspan(index, 1U));
+    check(interim.status == feedforge::replay_status::incomplete,
+          "chunked replay remains open before finish");
+  }
+
+  const auto complete = replay.finish();
+  check(complete.status == feedforge::replay_status::complete,
+        "chunked replay completes only on finish");
+  check(complete.frames_seen == 1U && complete.events_emitted == 1U &&
+            complete.bytes_consumed == complete_add.size(),
+        "chunked replay preserves counters and absolute consumption");
+  check(sink.add_calls == 1U && sink.update_calls == 0U,
+        "chunked replay invokes the selected sink once");
+  check(replay.push({}).status == feedforge::replay_status::complete &&
+            replay.finish().status == feedforge::replay_status::complete,
+        "chunked completion is sticky");
+}
+
 } // namespace
 
 int main() {
@@ -339,6 +368,7 @@ int main() {
   test_selected_events_and_stop();
   test_profile_semantics_equivalence();
   test_replay_adapter();
+  test_chunked_replay_adapter();
 
   if (failures != 0) {
     std::cerr << failures << " generated semantic test(s) failed\n";

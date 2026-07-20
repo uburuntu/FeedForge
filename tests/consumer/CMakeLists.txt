@@ -21,7 +21,17 @@ option(
 )
 
 if(FEEDFORGE_CONSUMER_ACQUISITION STREQUAL "package")
-  find_package(FeedForge CONFIG REQUIRED)
+  set(
+    FEEDFORGE_REQUEST_VERSION
+    ""
+    CACHE STRING
+    "Optional FeedForge package version requested by compatibility tests"
+  )
+  if(FEEDFORGE_REQUEST_VERSION STREQUAL "")
+    find_package(FeedForge CONFIG REQUIRED)
+  else()
+    find_package(FeedForge ${FEEDFORGE_REQUEST_VERSION} CONFIG REQUIRED)
+  endif()
 
   foreach(_variable IN ITEMS
       FeedForge_SCHEMA_DIR

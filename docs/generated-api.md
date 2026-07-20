@@ -1,11 +1,11 @@
 # Generated C++ API
 
-This document defines the v0.1 generated API. A pipeline is available when its
+This document defines the generated API. A pipeline is available when its
 generated header is installed or produced by `feedforge_generate()`; canonical
 pipelines are shipped with the package and covered by the conformance suite.
 
 FeedForge is experimental, is not exchange-certified, and is not production
-trading infrastructure. v0.1 offers source-level contracts, not a stable binary
+trading infrastructure. It offers source-level contracts, not a stable binary
 ABI.
 
 ## Header and namespace
@@ -93,7 +93,7 @@ using decoder = basic_decoder<feedforge::profile::portable_checked>;
 `sink_for_all_selected_events` denotes the generated compile-time requirement
 over all selected event types; an implementation may keep that helper name
 internal. `decoder` is the public alias selected by the pipeline's cohesive
-profile. The v0.1 profile uses variant ID `portable_checked.v1`.
+profile. The current profile uses variant ID `portable_checked.v1`.
 
 `decode_one` performs these operations in order:
 
@@ -163,8 +163,7 @@ Status meanings are:
 `empty_payload`, `unknown_message_type`, and `invalid_message_size` are errors.
 `stopped` is terminal but is not an error. `is_terminal()` is true for stop and
 all three errors; `is_error()` is true only for those errors. Unknown
-alpha/code field values are preserved and do not create a semantic error in
-v0.1.
+alpha/code field values are preserved and do not create a semantic error.
 
 ## Strict BinaryFILE replay
 
@@ -227,7 +226,58 @@ marker and is never passed to the decoder.
 Strict replay rejects every byte after a zero marker. It never guesses
 complete/incomplete when stop or error occurred first.
 
-### Counters and offsets
+## Chunked BinaryFILE replay
+
+Each generated namespace also exposes an additive v0.2 adapter for inputs that
+arrive in arbitrary chunks:
+
+```cpp
+template <class Sink>
+  requires sink_for_all_selected_events<Sink>
+class chunked_replayer {
+ public:
+  explicit chunked_replayer(
+      std::span<std::byte> scratch, Sink& sink) noexcept;
+
+  [[nodiscard]] feedforge::replay_summary
+  push(std::span<const std::byte> chunk) noexcept;
+
+  [[nodiscard]] feedforge::replay_summary finish() noexcept;
+  [[nodiscard]] feedforge::replay_summary summary() const noexcept;
+};
+```
+
+The adapter borrows both `scratch` and `sink` for its entire lifetime. Those
+objects must outlive it, and a pushed chunk must not overlap the scratch span.
+It owns no payload storage, performs no I/O, and allocates no memory. Scratch
+usage is bounded by the largest nonzero BinaryFILE payload the caller chooses
+to accept; a declared payload larger than `scratch.size()` terminates with
+`framing_error` and `framing_errc::insufficient_scratch` at that frame's
+absolute prefix offset. The rejected frame does not increment `frames_seen`.
+
+`push` accepts empty chunks and arbitrary boundaries, including a separate
+one-byte chunk for every prefix and payload byte. A split payload is copied
+into scratch and decoded as soon as it is complete. Complete frames wholly
+inside one chunk follow the same path. Counters, `bytes_consumed`, and
+`error_offset` are absolute from the start of the chunked session, never
+relative to the current chunk.
+
+A zero-length end marker remains provisional until `finish()`: a later byte,
+whether in the same or a subsequent chunk, is
+`trailing_data_after_end_marker`. `finish()` reports `complete` after an
+otherwise-final marker, `incomplete` at a clean frame boundary without a
+marker, or the same truncated-prefix/truncated-payload framing errors as
+one-shot replay. Sink stop and errors terminate immediately. Every terminal
+result, including a result produced by `finish()`, is sticky; later `push` and
+`finish` calls return the same summary without inspecting input or invoking the
+sink.
+
+When scratch is large enough and the chunks concatenate to a one-shot input,
+the terminal summary, decoded events, sink order, stop behavior, counters, and
+offsets are identical to `replay_binary_file` for that input. The existing
+one-shot function and `binary_file_cursor` APIs are unchanged.
+
+## Counters and offsets
 
 - `frames_seen` increments when a complete nonzero frame is obtained, before
   decoding. An unknown, wrong-sized, or sink-stopped frame therefore counts;

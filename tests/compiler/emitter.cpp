@@ -236,6 +236,9 @@ void test_golden_and_determinism() {
   check_contains(*first,
                  "std::memcpy(event.side.raw.data(), payload.data() + 7U, 1U)",
                  "projected ASCII copy is emitted");
+  check_contains(*first, "class chunked_replayer", "caller-buffered chunked replay is emitted");
+  check_contains(*first, "cursor_.next(chunk.subspan(position))",
+                 "chunked replay consumes arbitrary chunk boundaries");
 
   compiler::ffir_v1 skip_ir = ir;
   skip_ir.pipeline.unknown_messages = "skip";
@@ -296,6 +299,14 @@ void test_emission_invariants() {
   const auto collision = compiler::emit_cpp(invalid);
   check(!collision && collision.error().code == "FFEMIT001",
         "generated declaration collision has stable emitter diagnostic");
+
+  invalid = mapping_ir();
+  invalid.pipeline.events[0].event = "chunked_replayer";
+  invalid.pipeline.fingerprint =
+      compiler::sha256_hex(compiler::canonical_pipeline_semantics_json(invalid));
+  const auto chunked_collision = compiler::emit_cpp(invalid);
+  check(!chunked_collision && chunked_collision.error().code == "FFEMIT001",
+        "chunked replay declaration collision has stable diagnostic");
 
   invalid = mapping_ir();
   invalid.pipeline.events[0].fields[0].width = 3U;
