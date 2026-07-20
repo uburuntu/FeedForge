@@ -232,7 +232,9 @@ foreach(_standard IN LISTS _feedforge_generated_standards)
   )
   target_link_libraries("${_target}" PRIVATE FeedForge::runtime)
   feedforge_configure_project_target("${_target}")
-  if(CMAKE_CXX_COMPILER_ID MATCHES "^(AppleClang|Clang|GNU)$")
+  if(MSVC)
+    target_compile_options("${_target}" PRIVATE /WX)
+  elseif(CMAKE_CXX_COMPILER_ID MATCHES "^(AppleClang|Clang|GNU)$")
     target_compile_options(
       "${_target}"
       PRIVATE
@@ -240,8 +242,6 @@ foreach(_standard IN LISTS _feedforge_generated_standards)
         -fno-exceptions
         -fno-rtti
     )
-  elseif(MSVC)
-    target_compile_options("${_target}" PRIVATE /WX)
   endif()
   add_test(NAME "compiler.generated_cpp${_standard}" COMMAND "${_target}")
   set_tests_properties(
@@ -387,7 +387,9 @@ foreach(_source IN LISTS _feedforge_test_sources)
       "${_test_name}"
       PROPERTIES LABELS "hardening;differential"
     )
-    if(CMAKE_CXX_COMPILER_ID MATCHES "^(AppleClang|Clang|GNU)$")
+    if(MSVC)
+      target_compile_options("${_target}" PRIVATE /WX)
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "^(AppleClang|Clang|GNU)$")
       target_compile_options(
         "${_target}"
         PRIVATE
@@ -395,8 +397,6 @@ foreach(_source IN LISTS _feedforge_test_sources)
           -fno-exceptions
           -fno-rtti
       )
-    elseif(MSVC)
-      target_compile_options("${_target}" PRIVATE /WX)
     endif()
   endif()
   if(_test_name STREQUAL "hardening.allocation")
@@ -450,7 +450,7 @@ feedforge_add_standalone_fuzz_smoke(
   FeedForge::generated::itch50_all
 )
 
-if(CMAKE_CXX_COMPILER_ID MATCHES "^(AppleClang|Clang|GNU)$")
+if(NOT MSVC AND CMAKE_CXX_COMPILER_ID MATCHES "^(AppleClang|Clang|GNU)$")
   add_executable(
     feedforge_test_no_exceptions_rtti
     "${CMAKE_CURRENT_SOURCE_DIR}/hardening/no_exceptions_rtti.cpp"
@@ -523,7 +523,9 @@ foreach(_standard IN LISTS _feedforge_generated_standards)
       FeedForge::generated::itch50_order_events
   )
   feedforge_configure_project_target("${_target}")
-  if(CMAKE_CXX_COMPILER_ID MATCHES "^(AppleClang|Clang|GNU)$")
+  if(MSVC)
+    target_compile_options("${_target}" PRIVATE /WX)
+  elseif(CMAKE_CXX_COMPILER_ID MATCHES "^(AppleClang|Clang|GNU)$")
     target_compile_options(
       "${_target}"
       PRIVATE
@@ -531,8 +533,6 @@ foreach(_standard IN LISTS _feedforge_generated_standards)
         -fno-exceptions
         -fno-rtti
     )
-  elseif(MSVC)
-    target_compile_options("${_target}" PRIVATE /WX)
   endif()
   add_test(NAME "integration.canonical_headers_cpp${_standard}" COMMAND "${_target}")
   set_tests_properties(
