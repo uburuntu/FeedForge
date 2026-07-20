@@ -4,7 +4,8 @@
 
 | Version | Supported |
 |---|---|
-| 0.1.x | Yes |
+| 0.2.x | Yes |
+| 0.1.x | No |
 
 FeedForge is experimental software. Support means that reports are evaluated
 and fixes may be issued; it does not imply exchange certification or suitability

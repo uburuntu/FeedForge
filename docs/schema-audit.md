@@ -432,6 +432,6 @@ mapping is:
    on which each row appears; the message inventory records the complete page
    span.
 6. **Allowed alpha values:** the official prose lists current code values, but
-   FeedForge v0.1 preserves unknown alpha values and performs no semantic enum
+   FeedForge preserves unknown alpha values and performs no semantic enum
    rejection. The structural schema therefore does not turn those lists into
    runtime constraints.

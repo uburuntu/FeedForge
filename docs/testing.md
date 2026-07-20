@@ -76,6 +76,14 @@ The cursor and strict generated replay are separate layers: the cursor exposes
 bytes after an end marker, while strict replay classifies them as
 `trailing_data_after_end_marker`.
 
+Chunked replay tests feed every two-way split point and a one-byte-at-a-time
+partition, then exercise hundreds of deterministic arbitrary partitions. For
+complete, incomplete, truncated-prefix, truncated-payload, trailing-data,
+decode-error, unknown-message, and sink-stop inputs, the final summary and
+recorded event order must equal one-shot replay. Separate runtime tests cover
+split prefix/payload assembly, absolute offsets and ordinals, provisional end
+markers, terminal stickiness, and `insufficient_scratch`.
+
 ### ITCH conformance
 
 For every message in the canonical
@@ -92,6 +100,20 @@ The order-events pipeline also requires exact emission for `A`, `F`, `E`, `C`,
 `H`, message `O`, unknown discriminators under both policies, empty payloads,
 complete and incomplete multi-frame input, malformed known-unselected messages,
 sink stop, and exact replay counters.
+
+### Independent differential oracle
+
+The test-only oracle under [`tests/reference`](../tests/reference) is a second,
+standard-library-only transcription of all 23 message layouts. It does not use
+FeedForge wire loaders, generated metadata, or the canonical schema. Its sink
+adapter compares every projected field with hard-coded protocol offsets and
+checks both continue and stop outcomes. Boundary patterns, deterministic
+random values, and a dedicated differential fuzzer exercise the comparison.
+
+This is implementation independence, not specification independence. A
+protocol misunderstanding repeated in both transcriptions can survive, so the
+oracle records that limit and remains directly auditable against the official
+protocol document.
 
 ### Projection and compile-fail
 
@@ -125,7 +147,9 @@ the host compiler and consume committed canonical headers instead.
 the scalar, array, aligned, and nothrow global allocation functions, and then
 measures only the decode or replay call. Its fixed-storage sink does not
 allocate. The test separately covers emitted, skipped, complete, incomplete,
-and sink-stopped paths. This isolates FeedForge-owned work; user sinks remain
+sink-stopped, and one-byte chunked paths. Caller-owned scratch is prepared
+before measurement; adapter construction, every push, and finish are inside
+the measured region. This isolates FeedForge-owned work; user sinks remain
 responsible for their own behavior.
 
 `feedforge_test_no_exceptions_rtti` is an explicit C++20 target that compiles and
@@ -165,8 +189,11 @@ The Clang libFuzzer executables are:
 
 1. `fuzz_binary_file`: arbitrary bytes through `binary_file_cursor`;
 2. `fuzz_decode_one`: arbitrary payload through the canonical
-   `itch50_all::basic_decoder`; and
-3. `fuzz_replay`: arbitrary BinaryFILE through canonical strict replay and a
+   `itch50_all::basic_decoder`;
+3. `fuzz_differential_decode`: arbitrary and forced-valid payloads compared
+   against the independent 23-message oracle; and
+4. `fuzz_replay`: arbitrary BinaryFILE through canonical one-shot and chunked
+   replay, including one-byte and deterministic arbitrary partitions, with a
    complete `noexcept` no-op sink.
 
 At configure time, `fuzz/generate_corpus.cmake` validates `raw_hex` against
@@ -195,7 +222,7 @@ cmake --build --preset fuzz
 
 The fuzz preset fails with an actionable diagnostic when the selected Clang has
 no usable libFuzzer, ASan, and UBSan runtime. Normal test builds also compile the
-same three harnesses with fixed deterministic arbitrary inputs as
+same four harnesses with fixed deterministic arbitrary inputs as
 `hardening.arbitrary_input.*`; this is the local smoke path for AppleClang
 installations that omit libFuzzer.
 
@@ -240,10 +267,14 @@ The [main CI workflow](../.github/workflows/ci.yml) must cover:
   compatibility;
 - Clang ASan and UBSan, no-exception and no-RTTI, release-mode, installed
   generation, and optional RTSan checks;
-- Linux x86-64 Tier 1, macOS arm64 AppleClang Tier 2, and Windows x64 MSVC 2022
-  Tier 2; and
+- Linux x86-64 Tier 1 and full compiler/runtime coverage on macOS arm64
+  AppleClang Tier 2;
+- Windows x64 MSVC 2022 runtime/generated coverage plus a ClangCL
+  clean-output compiler-generation gate;
+- a release-blocking s390x big-endian portability probe under QEMU, which is
+  emulation evidence rather than a physical-hardware support tier; and
 - the separate [Linux fuzz-smoke workflow](../.github/workflows/fuzz-smoke.yml)
-  for all three libFuzzer targets.
+  for all four libFuzzer targets, including a weekly five-minute campaign.
 
 Tier 1 failures block integration. Tier 2 jobs are expected to pass and must not
 be silently marked `continue-on-error`. A temporary Tier 2 exception must be

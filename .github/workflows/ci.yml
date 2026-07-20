@@ -31,7 +31,7 @@ jobs:
             package: clang-14
             cxx: clang++-14
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install minimum compiler
         run: |
           sudo apt-get update
@@ -58,6 +58,53 @@ jobs:
             -DCMAKE_PREFIX_PATH="${RUNNER_TEMP}/feedforge"
           cmake --build build/runtime-consumer --target run-feedforge-consumer
 
+  big-endian-runtime-generated:
+    name: Portability / emulated s390x big-endian / C++20 compiler OFF
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install s390x cross compiler and QEMU user emulator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            file \
+            g++-s390x-linux-gnu \
+            ninja-build \
+            qemu-user
+      - name: Prove target byte order and executable architecture
+        run: |
+          cat >"${RUNNER_TEMP}/s390x-endian.cpp" <<'CPP'
+          #include <bit>
+          static_assert(std::endian::native == std::endian::big);
+          int main() {
+            return std::endian::native == std::endian::big ? 0 : 1;
+          }
+          CPP
+          s390x-linux-gnu-g++ -std=c++20 \
+            "${RUNNER_TEMP}/s390x-endian.cpp" \
+            -o "${RUNNER_TEMP}/s390x-endian"
+          file "${RUNNER_TEMP}/s390x-endian" | tee "${RUNNER_TEMP}/s390x-file.txt"
+          grep -F "ELF 64-bit MSB" "${RUNNER_TEMP}/s390x-file.txt"
+          grep -F "IBM S/390" "${RUNNER_TEMP}/s390x-file.txt"
+          qemu-s390x -L /usr/s390x-linux-gnu "${RUNNER_TEMP}/s390x-endian"
+      - name: Configure committed runtime and generated headers for s390x
+        run: >-
+          cmake -S . -B build/s390x -G Ninja
+          -DCMAKE_TOOLCHAIN_FILE="${GITHUB_WORKSPACE}/cmake/toolchains/s390x-linux-gnu.cmake"
+          -DCMAKE_BUILD_TYPE=Debug
+          -DFEEDFORGE_BUILD_COMPILER=OFF
+          -DFEEDFORGE_BUILD_TESTS=ON
+          -DFEEDFORGE_BUILD_EXAMPLES=ON
+          -DFEEDFORGE_WARNINGS_AS_ERRORS=ON
+      - name: Cross-build runtime, generated tests, and examples
+        run: cmake --build build/s390x --parallel 2
+      # This packaging test recursively configures a child build without a
+      # toolchain or emulator. All executable runtime tests remain included.
+      - name: Run applicable runtime tests under qemu-s390x
+        run: >-
+          ctest --test-dir build/s390x --output-on-failure --no-tests=error
+          -E '^consumer\.installed_'
+
   # Clang 18's concepts feature level hides libstdc++ 13's std::expected, so
   # compiler-on Clang jobs pair it with the matching libc++ 18 packages.
   current-full:
@@ -80,7 +127,7 @@ jobs:
     env:
       CXXFLAGS: ${{ matrix.cxxflags }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install Clang C++ standard library
         if: matrix.libcxx
         run: |
@@ -118,7 +165,7 @@ jobs:
     env:
       CXXFLAGS: ${{ matrix.cxxflags }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install Clang C++ standard library
         if: matrix.libcxx
         run: |
@@ -148,7 +195,7 @@ jobs:
     name: Tier 1 / Clang / C++20 no exceptions or RTTI
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Configure explicit generated-runtime gate
         run: >-
           cmake --preset no-exceptions-rtti
@@ -165,7 +212,7 @@ jobs:
     env:
       CXXFLAGS: -stdlib=libc++
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install Clang C++ standard library
         run: |
           sudo apt-get update
@@ -187,7 +234,7 @@ jobs:
     name: Tier 1 / current GCC / Release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Configure
         run: cmake --preset release -DFEEDFORGE_WARNINGS_AS_ERRORS=ON
       - name: Build
@@ -199,7 +246,7 @@ jobs:
     name: Tier 1 / installed generation consumer / C++20
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Configure and build FeedForge
         run: |
           cmake --preset dev -DFEEDFORGE_WARNINGS_AS_ERRORS=ON
@@ -218,7 +265,7 @@ jobs:
     name: Tier 1 / optional current-Clang RTSan smoke
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Feature-detect RealtimeSanitizer
         run: >-
           cmake --preset rtsan
@@ -232,27 +279,32 @@ jobs:
           --no-tests=ignore -R '^hardening\.rtsan_smoke$'
 
   macos-appleclang:
-    name: Tier 2 / macOS arm64 AppleClang / runtime+generated
+    name: Tier 2 / macOS arm64 AppleClang / full compiler+runtime
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Confirm Tier 2 architecture
         run: test "$(uname -m)" = arm64
-      - name: Configure compiler-off C++20 project
+      - name: Record AppleClang identity
+        run: clang++ --version
+      - name: Configure compiler-enabled mixed C++20+C++23 project
         run: >-
-          cmake --preset compiler-off
+          cmake --preset dev
           -DCMAKE_CXX_COMPILER=clang++
+          -DFEEDFORGE_BUILD_COMPILER=ON
           -DFEEDFORGE_WARNINGS_AS_ERRORS=ON
-      - name: Build runtime, generated tests, and example
-        run: cmake --build --preset compiler-off
-      - name: Test
-        run: ctest --preset compiler-off
+      - name: Build full project
+        run: cmake --build --preset dev
+      - name: Test full compiler and runtime project
+        run: ctest --preset dev
+      - name: Verify canonical generated bytes on macOS
+        run: cmake --build --preset dev --target check-generated
 
   windows-msvc:
     name: Tier 2 / Windows x64 MSVC 2022 / runtime+generated
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Configure compiler-off C++20 project
         run: >-
           cmake -S . -B build/msvc
@@ -265,3 +317,34 @@ jobs:
         run: cmake --build build/msvc --config Debug
       - name: Test
         run: ctest --test-dir build/msvc -C Debug --output-on-failure
+
+  windows-clangcl-compiler:
+    name: Tier 2 / Windows x64 ClangCL / clean-output compiler generation
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Configure compiler-enabled ClangCL project
+        run: >-
+          cmake -S . -B build/clangcl
+          -G "Visual Studio 17 2022" -A x64 -T ClangCL
+          -DFEEDFORGE_BUILD_COMPILER=ON
+          -DFEEDFORGE_BUILD_TESTS=ON
+          -DFEEDFORGE_BUILD_EXAMPLES=OFF
+          -DFEEDFORGE_WARNINGS_AS_ERRORS=ON
+      - name: Build compiler and compiler tests
+        run: cmake --build build/clangcl --config Debug
+      - name: Record compiler capability
+        shell: pwsh
+        run: |
+          $compiler = "build/clangcl/src/feedforgec/Debug/feedforgec.exe"
+          & $compiler --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Host "::notice title=Windows compiler boundary::This gate covers clean-output generation with the installed Visual Studio ClangCL toolset. The atomic replacement test remains outside the Windows support claim."
+      - name: Run compiler tests supported by the clean-output capability
+        run: >-
+          ctest --test-dir build/clangcl -C Debug --output-on-failure
+          --no-tests=error -R '^compiler\.'
+          -E '^compiler\.emit_atomic_deterministic$'
+      - name: Verify canonical generated bytes with ClangCL host compiler
+        run: >-
+          cmake --build build/clangcl --config Debug --target check-generated

@@ -66,9 +66,9 @@ Format version 1 rejects unknown keys. Every top-level key is required:
 - `name`: pipeline identifier;
 - `namespace`: `::`-separated valid C++ namespace components;
 - `schema`: exactly the parsed schema's `name`;
-- `profile`: `"portable_checked"` in v0.1;
+- `profile`: exactly `"portable_checked"`;
 - `unknown_messages`: `"error"` or `"skip"`; and
-- `unselected_messages`: exactly `"skip"` in v0.1.
+- `unselected_messages`: exactly `"skip"`.
 
 At least one `[[emit]]` table is required.
 
@@ -107,7 +107,7 @@ Against the selected schema, the compiler must reject:
 - projection of a discriminator or reserved field;
 - a projected logical type without the required C++20 value representation;
   and
-- unknown/unselected policy values outside the v0.1 set.
+- unknown/unselected policy values outside the supported set.
 
 Malformed known messages always produce a decode error. Neither policy may
 disable exact-size validation:
@@ -120,7 +120,7 @@ disable exact-size validation:
 
 See [Generated API](generated-api.md) for complete outcome and replay semantics.
 
-## Canonical v0.1 pipelines
+## Canonical pipelines
 
 The required [`itch50_all` pipeline](../pipelines/all_messages.toml) uses namespace
 `feedforge::generated::nasdaq::itch50_all`, schema

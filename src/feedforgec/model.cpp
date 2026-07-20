@@ -739,10 +739,9 @@ result<resolved_pipeline> validate_pipeline(const pipeline_source& source,
             "' does not match parsed schema '" + schema.name + "'"));
   }
   if (source.profile != "portable_checked") {
-    return std::unexpected(pipeline_problem(
-        source, source.mark, "FFPIPE008", "pipeline.profile",
-        "unsupported profile '" + source.profile + "'",
-        "v0.1 supports only portable_checked"));
+    return std::unexpected(pipeline_problem(source, source.mark, "FFPIPE008", "pipeline.profile",
+                                            "unsupported profile '" + source.profile + "'",
+                                            "this compiler supports only portable_checked"));
   }
   if (source.unknown_messages != "error" &&
       source.unknown_messages != "skip") {
@@ -751,9 +750,9 @@ result<resolved_pipeline> validate_pipeline(const pipeline_source& source,
         "unknown_messages must be \"error\" or \"skip\""));
   }
   if (source.unselected_messages != "skip") {
-    return std::unexpected(pipeline_problem(
-        source, source.mark, "FFPIPE009", "pipeline.unselected_messages",
-        "unselected_messages must be \"skip\" in v0.1"));
+    return std::unexpected(pipeline_problem(source, source.mark, "FFPIPE009",
+                                            "pipeline.unselected_messages",
+                                            "unselected_messages must be \"skip\""));
   }
   if (source.cpp_namespace.empty()) {
     return std::unexpected(pipeline_problem(

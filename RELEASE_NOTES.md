@@ -1,65 +1,83 @@
-# FeedForge v0.1.0
+# FeedForge v0.2.0
 
-FeedForge v0.1.0 is the first release of the offline, ahead-of-time compiler and
-C++ runtime for checked Nasdaq TotalView-ITCH 5.0 projection pipelines.
+FeedForge v0.2.0 turns the offline checked decoder into a stronger integration
+and evaluation surface while preserving its deliberately narrow product scope.
+It remains experimental, is not exchange-certified, and is not production
+trading infrastructure.
 
 ## Highlights
 
-- Versioned schema and projection TOML with strict validation and diagnostics.
-- Deterministic FFIR lowering and self-contained generated C++20 headers.
-- Complete current 23-message Nasdaq TotalView-ITCH 5.0 schema and reviewed
-  positive/wrong-size fixtures.
-- Canonical `itch50_all` and `itch50_order_events` generated pipelines.
-- Bounds-checked in-memory Nasdaq BinaryFILE replay through statically bound
-  typed sinks.
-- Header-only runtime and generated public targets with no third-party runtime
-  dependency.
-- Runtime-only and compiler-enabled CMake packages, including downstream custom
-  pipeline generation.
-- Allocation-free FeedForge-owned decode/replay work after caller setup, with
-  exceptions and RTTI disabled where required.
+- Caller-buffered `chunked_replayer<Sink>` accepts arbitrary input boundaries
+  through explicit `push()` and `finish()` calls. With sufficient scratch, its
+  events, counters, offsets, stop behavior, and terminal result match one-shot
+  replay.
+- `make demo` builds and runs a non-empty, format-valid synthetic order-event
+  session with stable field-level output and no captured exchange data.
+- A separately transcribed, standard-library-only ITCH 5.0 oracle compares all
+  projected fields and outcomes for all 23 message layouts. Its independence
+  limit is documented explicitly.
+- Four ASan+UBSan libFuzzer targets now cover framing, generated decode,
+  independent differential decode, and one-shot/chunked replay equivalence.
+  Push and pull-request runs remain bounded; a weekly campaign runs longer.
+- Hosted portability evidence now includes full compiler/runtime generation on
+  macOS arm64, MSVC runtime coverage plus ClangCL clean-output generation on
+  Windows x64, and an emulated s390x big-endian runtime/generated-code probe.
+- The specialization case study publishes the frozen method, all guarded
+  results, rejected hypotheses, code-size cost, environment limits, and a
+  redacted synthetic-holdout conclusion.
+- Pinned GitHub Actions, CodeQL, secret scanning, private vulnerability
+  reporting, and protected-main checks define the public repository boundary.
 
-## Toolchains and platforms
+## Compatibility
 
-- Runtime and generated headers are strict C++20. Minimum tested compilers are
-  GCC 11 and Clang 14.
-- The optional `feedforgec` host compiler is C++23 and requires GCC 13.2 or
-  Clang 17 with a corresponding standard library, or newer.
-- Linux x86-64 is Tier 1. AppleClang on macOS arm64 and MSVC 2022 on Windows x64
-  are Tier 2.
-- `toml++` is pinned and private to the optional host compiler.
+The package version and generated-header identity are `0.2.0`. Runtime API
+compatibility is now `2` because generated v0.2 headers use the new chunked
+framing types. A v0.2 generated header must not be mixed with a v0.1 runtime;
+the compile-time compatibility assertion rejects that combination.
+
+The one-shot `binary_file_cursor`, `decoder`, and `replay_binary_file()` APIs
+remain available. Schema, pipeline, and FFIR format versions remain `1`, and
+`portable_checked.v1` remains the only implementation profile. Installed CMake
+packages use same-minor compatibility while FeedForge is pre-1.0.
+
+Runtime and generated headers remain strict C++20. Minimum tested compilers are
+GCC 11 and Clang 14. The optional `feedforgec` host compiler remains C++23 and
+requires GCC 13.2 or Clang 17 with a corresponding standard library, or newer.
 
 ## Validation
 
-Publication requires the release commit to pass the full hosted
-compiler/platform matrix, Linux ASan+UBSan with leak detection, all three
-bounded libFuzzer jobs, deterministic generation checks, installed
-runtime/compiler consumers, no-exception/no-RTTI coverage, and a clean-clone
-build/install/replay audit. The published annotated tag records the exact
-commit, and the GitHub Release links the exact hosted run attempts retained as
-release evidence.
+The release commit is required to pass:
 
-The audited schema and fixture inventory is documented in
-[docs/schema-audit.md](docs/schema-audit.md). Benchmark infrastructure is
-available for reproducible engineering work, but v0.1.0 makes no latency,
-throughput, or production-readiness claim.
+- the hosted Linux compiler, minimum-toolchain, release, sanitizer,
+  no-exception/no-RTTI, package-consumer, and generated-byte gates;
+- release-blocking macOS, Windows, and emulated big-endian portability jobs;
+- all four seeded libFuzzer jobs and the independent oracle self-test;
+- deterministic clean-clone build, test, install, generation, demo, and replay;
+- CodeQL security analysis plus reachable-history secret and artifact scans.
+
+The annotated tag and GitHub Release identify the exact commit and hosted run
+attempts. `feedforge-v0.2.0-performance-evidence.tar.gz` contains the retained
+public JSON/CSV series and comparison plus the corrected redacted holdout
+attestation used by the performance case study.
 
 ## Limitations
 
-FeedForge v0.1.0 is experimental, is not exchange-certified, and is not
-production trading infrastructure. In particular:
+- FeedForge provides no live networking, packet recovery, sequencing, order
+  book, strategy, capture service, database, or operational trading controls.
+- Input is caller-owned in-memory data or caller-delivered chunks. FeedForge
+  performs no file or network I/O.
+- Chunked replay needs caller-owned scratch. A declared payload larger than the
+  supplied span terminates with `framing_errc::insufficient_scratch`.
+- QEMU proves big-endian code execution and ABI behavior, not physical s390x
+  hardware performance or a new support tier.
+- The Windows ClangCL compiler gate covers clean-output deterministic
+  generation; the destination-replacement atomicity test remains outside that
+  support claim.
+- Performance evidence uses deterministic synthetic corpora on one recorded
+  host and toolchain. It does not establish production latency, throughput, or
+  cross-platform speed.
+- Exchange data is not bundled. Authoritative protocol documents remain
+  subject to their owners' terms.
 
-- it provides no live networking, packet recovery, sequencing, order book,
-  strategy, capture service, or database;
-- it accepts caller-owned in-memory BinaryFILE input and leaves file I/O or
-  mapping to the caller;
-- only `portable_checked.v1` is implemented; there is no runtime ISA or backend
-  selection;
-- unknown alpha/code values are preserved rather than semantically rejected;
-- source compatibility is versioned, but no stable binary ABI is promised;
-- no latency, throughput, or production-readiness claim is made; and
-- exchange data is not bundled.
-
-Authoritative protocol documents remain subject to their owners' terms. A
-changed upstream checksum requires review rather than automatic schema or
-fixture updates.
+See the [v0.1.0 GitHub Release](https://github.com/uburuntu/FeedForge/releases/tag/v0.1.0)
+for the previous release notes and retained validation evidence.

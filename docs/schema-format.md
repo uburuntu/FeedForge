@@ -177,7 +177,7 @@ Optional field keys are:
   `spec_page`, as provenance and documentation metadata.
 
 `allowed` documents codes only. A checked decoder preserves unknown alpha/code
-bytes and does not semantically reject them in v0.1.
+bytes and does not semantically reject them.
 
 ## Validation
 
