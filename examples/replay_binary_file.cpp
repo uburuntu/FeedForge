@@ -129,6 +129,9 @@ int main(int argc, char** argv) {
     return 2;
   }
 
+  // This local CLI intentionally opens the exact input path selected by its
+  // caller; it has no privileged or fixed-directory path boundary.
+  // codeql[cpp/path-injection]
   std::ifstream input{argv[1], std::ios::binary | std::ios::ate};
   if (!input) {
     std::cerr << "unable to open " << argv[1] << '\n';
