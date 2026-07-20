@@ -8,12 +8,15 @@ foreach(_source IN LISTS _feedforge_example_sources)
   get_filename_component(_name "${_source}" NAME_WE)
   if(_name STREQUAL "replay_binary_file")
     set(_target feedforge-replay)
+  elseif(_name STREQUAL "synthetic_order_events")
+    set(_target feedforge-demo)
   else()
     set(_target "feedforge_example_${_name}")
   endif()
   add_executable("${_target}" "${_source}")
   target_compile_features("${_target}" PRIVATE cxx_std_20)
-  if(_name STREQUAL "replay_binary_file")
+  if(_name STREQUAL "replay_binary_file" OR
+     _name STREQUAL "synthetic_order_events")
     target_link_libraries(
       "${_target}"
       PRIVATE FeedForge::generated::itch50_order_events

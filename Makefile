@@ -103,6 +103,8 @@ LINUX_JOBS ?= $(if $(strip $(JOBS)),$(JOBS),4)
 TIDY_JOBS ?= $(if $(strip $(JOBS)),$(JOBS),4)
 
 FORMAT_PATHS := include src tests fuzz benchmarks examples
+FORMAT_EXTENSIONS := h,hpp,c,cc,cpp,cxx
+FORMAT_EXCLUDES := ':(exclude)tests/golden/synthetic_pipeline.hpp'
 
 define announce
 @set -eu; \
@@ -163,9 +165,9 @@ endef
 	verify verify-all \
 	test-allocation test-arbitrary-input test-installed \
 	generated-check generated-refresh compiler validate pipeline-compile pipeline-ir \
-	replay replay-empty \
+	demo replay replay-empty \
 	llvm-dev llvm-sanitizers rtsan \
-	fuzz-build fuzz-binary-file fuzz-decode-one fuzz-replay fuzz-smoke \
+	fuzz-build fuzz-binary-file fuzz-decode-one fuzz-differential-decode fuzz-replay fuzz-smoke \
 	bench-smoke bench-run bench-compare \
 	install install-runtime \
 	lint format-check format-changed tidy linux-smoke \
@@ -336,6 +338,18 @@ test-installed: ## Run installed canonical and generated consumer tests
 
 ##@ Generation and replay
 
+demo: ## Build and run the embedded synthetic order-event showcase
+	@set -eu; \
+	log="$$(mktemp "$${TMPDIR:-/tmp}/feedforge-demo.XXXXXX")"; \
+	trap 'rm -f "$$log"' EXIT HUP INT TERM; \
+	if ! $(CMAKE) --preset compiler-off $(CMAKE_ARGS) >"$$log" 2>&1; then \
+		cat "$$log" >&2; exit 1; \
+	fi; \
+	if ! $(CMAKE_BUILD) --preset compiler-off --target feedforge-demo $(PARALLEL) >>"$$log" 2>&1; then \
+		cat "$$log" >&2; exit 1; \
+	fi; \
+	"$(BUILD_ROOT)/compiler-off/examples/feedforge-demo"
+
 generated-check: ## Compare canonical generated headers byte-for-byte
 	$(call announce,Checking committed generated headers)
 	@$(CMAKE) --preset "$(GENERATE_PRESET)" $(CMAKE_ARGS)
@@ -430,7 +444,7 @@ rtsan: ## Build and run the isolated RealtimeSanitizer smoke target
 
 ##@ Fuzzing
 
-fuzz-build: ## Configure and build all three libFuzzer targets
+fuzz-build: ## Configure and build all four libFuzzer targets
 	$(require_llvm)
 	$(call announce,Building libFuzzer targets)
 	@$(CMAKE) --preset fuzz -B "$(FUZZ_BUILD_DIR)" \
@@ -443,12 +457,16 @@ fuzz-binary-file: fuzz-build ## Run bounded BinaryFILE cursor fuzzing
 fuzz-decode-one: fuzz-build ## Run bounded all-message decode fuzzing
 	$(call run_fuzzer,decode_one)
 
+fuzz-differential-decode: fuzz-build ## Run bounded independent differential decode fuzzing
+	$(call run_fuzzer,differential_decode)
+
 fuzz-replay: fuzz-build ## Run bounded strict replay fuzzing
 	$(call run_fuzzer,replay)
 
-fuzz-smoke: fuzz-build ## Run all three bounded fuzz targets sequentially
+fuzz-smoke: fuzz-build ## Run all four bounded fuzz targets sequentially
 	$(call run_fuzzer,binary_file)
 	$(call run_fuzzer,decode_one)
+	$(call run_fuzzer,differential_decode)
 	$(call run_fuzzer,replay)
 
 ##@ Benchmarks
@@ -523,7 +541,7 @@ format-check: ## Check formatting of changed non-generated C++ lines
 	@set -eu; \
 	tmp="$$(mktemp "$${TMPDIR:-/tmp}/feedforge-format.XXXXXX")"; \
 	trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
-	rc=0; "$(GIT_CLANG_FORMAT)" --binary "$(CLANG_FORMAT)" --diff HEAD -- $(FORMAT_PATHS) > "$$tmp" 2>&1 || rc=$$?; \
+	rc=0; "$(GIT_CLANG_FORMAT)" --binary "$(CLANG_FORMAT)" --extensions "$(FORMAT_EXTENSIONS)" --diff HEAD -- $(FORMAT_PATHS) $(FORMAT_EXCLUDES) > "$$tmp" 2>&1 || rc=$$?; \
 	if grep -q '^diff --git ' "$$tmp"; then cat "$$tmp"; exit 1; fi; \
 	cat "$$tmp"; \
 	if test "$$rc" -ne 0; then exit "$$rc"; fi
@@ -534,7 +552,7 @@ format-changed: ## Format changed non-generated C++ lines; requires CONFIRM=form
 	@set -eu; \
 	tmp="$$(mktemp "$${TMPDIR:-/tmp}/feedforge-format.XXXXXX")"; \
 	trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
-	rc=0; "$(GIT_CLANG_FORMAT)" --binary "$(CLANG_FORMAT)" --force HEAD -- $(FORMAT_PATHS) > "$$tmp" 2>&1 || rc=$$?; \
+	rc=0; "$(GIT_CLANG_FORMAT)" --binary "$(CLANG_FORMAT)" --extensions "$(FORMAT_EXTENSIONS)" --force HEAD -- $(FORMAT_PATHS) $(FORMAT_EXCLUDES) > "$$tmp" 2>&1 || rc=$$?; \
 	cat "$$tmp"; \
 	if test "$$rc" -ne 0 && ! grep -q '^changed files:' "$$tmp"; then exit "$$rc"; fi
 
