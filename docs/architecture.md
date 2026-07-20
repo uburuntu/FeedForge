@@ -1,9 +1,7 @@
 # FeedForge architecture
 
-> **Status:** This document describes the normative v0.1 target in
-> [SPEC.md](../SPEC.md), not a claim that every component has shipped. FeedForge
-> is experimental, is not exchange-certified, and is not production trading
-> infrastructure.
+> FeedForge is experimental, is not exchange-certified, and is not production
+> trading infrastructure.
 
 FeedForge is an offline, ahead-of-time compiler for checked market-data decode
 pipelines. The host tool consumes a wire schema, a projection pipeline, and one
@@ -11,10 +9,9 @@ cohesive implementation profile. It resolves them into FeedForge IR (FFIR) and
 emits C++20. At runtime, framing bytes pass through the generated decoder to a
 statically bound typed sink; no schema or pipeline file is parsed there.
 
-This is a component contract, not an availability matrix. During development,
-source files can be partial or not yet wired into the runnable tool. Treat a
-feature as available only when its artifacts are present and the corresponding
-[test and release evidence](testing.md) is recorded.
+This document defines the component boundaries and public design contract.
+Released availability is described by the artifacts, generated headers, and
+[test coverage](testing.md) in the same revision.
 
 ## Data flow
 
@@ -31,7 +28,7 @@ BinaryFILE bytes --> runtime cursor --> generated decoder --> typed sink
 The offline host compiler is C++23. The public runtime and generated output are
 strict C++20 and must also compile in C++23 mode without changing their
 documented semantics. Generated headers depend on the public FeedForge runtime
-headers, but have no third-party runtime dependency. See SPEC Sections 7–13.
+headers, but have no third-party runtime dependency.
 
 ## Boundary contracts
 
@@ -72,7 +69,7 @@ The backend receives FFIR only; it must not inspect frontend TOML objects.
 Canonical FFIR JSON is deterministic debugging and reproducibility output:
 UTF-8, sorted keys, defined array order, no insignificant whitespace, no host
 paths or timestamps, and a final newline. It is versioned but is not a
-long-term public interchange guarantee. See SPEC Section 11.
+long-term public interchange guarantee.
 
 ### C++ backend
 
@@ -85,8 +82,7 @@ absolute paths.
 
 For semantically identical inputs, profile, and compiler version, output must
 be byte-identical across working directories and machines. Generated source is
-never edited by hand. See SPEC Section 12 and
-[the generated API contract](generated-api.md).
+never edited by hand. See [the generated API contract](generated-api.md).
 
 ### Runtime
 
@@ -114,11 +110,10 @@ list of load, validation, dispatch, and delivery policies. v0.1 defines only
 switch dispatch, and direct stack-event delivery.
 
 The generated `basic_decoder<Implementation>` seam permits a same-source-shape
-implementation satisfying `feedforge::decoder_implementation`. A future
-variant that changes emitted control flow must be emitted as a distinct,
-profile-bearing backend variant from the same resolved semantics. Every variant
-must preserve event types, values, errors, skip/stop behavior, and sink order.
-See [Adding a backend variant](adding-a-backend.md) and SPEC Section 13.
+implementation satisfying `feedforge::decoder_implementation`. Any variant that
+changes emitted control flow must be emitted as a distinct, profile-bearing
+backend variant from the same resolved semantics. Every variant must preserve
+event types, values, errors, skip/stop behavior, and sink order.
 
 ## Deliberate limits
 

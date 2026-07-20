@@ -1,9 +1,8 @@
 # Schema TOML format
 
-> **Status:** This is the normative format-version-1 design from SPEC Sections
-> 10, 14, and 17, not a statement that a particular build has complete parser
-> or lowering support. Availability requires the corresponding compiler and
-> release tests. FeedForge remains experimental and is not exchange-certified.
+This document normatively defines schema format version 1. An implementation
+conforms only if it accepts, rejects, resolves, and fingerprints schemas as
+specified here.
 
 A schema records fixed wire layout and semantic value types. It does not select
 events, contain C++, or configure runtime processing. A separate
@@ -154,12 +153,9 @@ Each `[[messages]]` table requires:
 - one or more nested `[[messages.fields]]` tables.
 
 The optional message keys are `description` (string), `spec_section` (string),
-and `spec_page` (non-negative integer); they are audit/documentation metadata
-and do not affect decoding.
-
-SPEC Section 14.2 names those metadata keys but does not explicitly state their
-TOML value types. The types above record the current frontend interpretation;
-the source specification should make them explicit before the format is frozen.
+and `spec_page` (non-negative integer). These exact value types are part of the
+format contract. The keys are provenance and documentation metadata and do not
+affect decoding.
 
 Each nested field requires:
 
@@ -178,7 +174,7 @@ Optional field keys are:
   message `type`;
 - `allowed`, an array of strings having the field's width; and
 - `description` and `spec_section` strings, and a non-negative integer
-  `spec_page`, as audit metadata.
+  `spec_page`, as provenance and documentation metadata.
 
 `allowed` documents codes only. A checked decoder preserves unknown alpha/code
 bytes and does not semantically reject them in v0.1.
@@ -202,16 +198,22 @@ Before lowering, the compiler must reject:
 
 Every byte of an ITCH message must be covered by a field or explicit reserved
 range. The generic grammar does not force ITCH's Stock Locate, Tracking Number,
-or Timestamp common header; that protocol-specific rule belongs to the ITCH
-schema audit.
+or Timestamp common header. The protocol-specific mapping and evidence are in
+the [Nasdaq TotalView-ITCH 5.0 schema audit](schema-audit.md).
 
 ## Semantics, provenance, and determinism
 
-The authoritative order is the official protocol document, explicit decisions
-in [SPEC.md](../SPEC.md), independently audited fixtures, then implementation.
-`schemas/sources.lock.toml` is required to record source URL, retrieval date,
-document revision, and SHA-256. A changed upstream checksum requires human
-review, not an automatic schema or fixture rewrite.
+This document is authoritative for schema syntax, validation, resolution, and
+canonicalization. Protocol-specific wire facts come from the official protocol
+documents identified by the [source lock](../schemas/sources.lock.toml) and the
+corresponding checked mapping in the
+[schema audit](schema-audit.md). Schemas, fixtures, and implementations must
+conform to those sources and rules; implementation behavior cannot override
+them.
+
+The source lock must record each source URL, retrieval date, document revision,
+and SHA-256. A changed upstream checksum requires human review, not an automatic
+schema or fixture rewrite.
 
 Comments, source paths, TOML key order, and table order where declared
 non-semantic do not affect the resolved schema fingerprint. Types are

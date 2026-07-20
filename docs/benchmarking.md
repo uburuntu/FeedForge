@@ -1,9 +1,9 @@
-# Post-v0.1 benchmark contract
+# Benchmarking
 
-Status: frozen contract version 1.0.0. This is post-v0.1 measurement
-infrastructure, not a v0.1 performance claim. Changing a workload, metric,
-threshold, or measurement rule requires a new contract version and fresh
-baselines.
+This document defines reproducible evaluation contract version 1.0.0. Benchmark
+results are engineering evidence, not a product performance claim. Changing a
+workload, metric, threshold, or measurement rule requires a new contract version
+and fresh baselines.
 
 ## Scope and invariants
 
@@ -23,10 +23,11 @@ suite also passes for both builds.
 
 The public corpus is loaded at process startup from
 `tests/fixtures/itch50/01_*.toml` through `23_*.toml`, in numeric order. The
-harness accepts only format version 1 fixtures with an independent reviewer,
-`review_status = "approved"`, and a `byte_source` stating that `raw_hex` is
-hand-authored and not schema-generated. No schema-derived payload enters a
-timed workload.
+harness accepts only format version 1 fixtures with
+`review_status = "approved"`,
+`reviewer = "independent-line-by-line-protocol-review"`, and a `byte_source`
+stating that `raw_hex` is hand-authored and not schema-generated. No
+schema-derived payload enters a timed workload.
 
 The workload sets are:
 
@@ -115,7 +116,9 @@ An optimization is a win only when all of these predeclared rules hold:
 
 `benchmarks/benchmark.py compare` applies rules 2 through 6 after checking
 artifact identity and correctness. Its nonzero result means “not demonstrated,”
-not necessarily “the implementation is slower.”
+not necessarily “the implementation is slower.” Its serialized
+`optimization_win` result covers those public-corpus rules only; full acceptance
+under this contract also requires the separate holdout confirmation in rule 7.
 
 ## Hardware manifest and reproducibility
 
@@ -154,8 +157,8 @@ it does not authorize changing this public contract or silently replacing the
 holdout.
 
 No README performance statement may be based on a single run, smoke mode,
-public fixtures alone, unmatched machines, or a cherry-picked case. A future
-README claim requires a passing comparison plus holdout confirmation and must
+public fixtures alone, unmatched machines, or a cherry-picked case. Any README
+claim requires a passing comparison plus holdout confirmation and must
 state the exact operation/pipeline, baseline and candidate revisions, hardware,
 compiler and flags, corpus class, statistic, repeat count, uncertainty/noise
 bound, and a durable link to JSON/CSV artifacts. It must not generalize a

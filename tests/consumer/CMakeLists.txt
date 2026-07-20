@@ -32,17 +32,51 @@ if(FEEDFORGE_CONSUMER_ACQUISITION STREQUAL "package")
     endif()
   endforeach()
   foreach(_doc IN ITEMS
-      adoption.md
-      adding-a-backend.md
-      architecture.md
-      generated-api.md
-      pipeline-format.md
-      schema-format.md
-      testing.md)
+      CONTRIBUTING.md
+      LICENSE
+      README.md
+      RELEASE_NOTES.md
+      SECURITY.md
+      docs/adoption.md
+      docs/adr/0001-tomlplusplus.md
+      docs/architecture.md
+      docs/benchmarking.md
+      docs/development.md
+      docs/generated-api.md
+      docs/pipeline-format.md
+      docs/schema-audit.md
+      docs/schema-format.md
+      docs/testing.md)
     if(NOT EXISTS "${FeedForge_DOC_DIR}/${_doc}")
       message(FATAL_ERROR "installed FeedForge document is missing: ${_doc}")
     endif()
   endforeach()
+  foreach(_linked_file IN ITEMS
+      .github/workflows/ci.yml
+      .github/workflows/fuzz-smoke.yml
+      CMakePresets.json
+      pipelines/all_messages.toml
+      pipelines/order_events.toml
+      schemas/nasdaq/totalview_itch_5_0.toml
+      schemas/sources.lock.toml)
+    if(NOT EXISTS "${FeedForge_DOC_DIR}/${_linked_file}")
+      message(
+        FATAL_ERROR
+        "installed FeedForge documentation link target is missing: ${_linked_file}"
+      )
+    endif()
+  endforeach()
+  file(
+    GLOB _installed_fixture_manifests
+    "${FeedForge_DOC_DIR}/tests/fixtures/itch50/*.toml"
+  )
+  list(LENGTH _installed_fixture_manifests _installed_fixture_count)
+  if(NOT _installed_fixture_count EQUAL 23)
+    message(
+      FATAL_ERROR
+      "installed FeedForge documentation must contain all 23 fixture manifests"
+    )
+  endif()
   foreach(_skill_file IN ITEMS
       feedforge-adoption/SKILL.md
       feedforge-adoption/examples.md

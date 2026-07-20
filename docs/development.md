@@ -156,10 +156,9 @@ ln -s build/dev/compile_commands.json compile_commands.json
 ```
 
 `.clang-format` and `.clang-tidy` intentionally remain at the repository root
-because Clang tooling discovers them by walking parent directories. The other
-root files retained there are either required by SPEC or conventional project
-entry points; moving them would make the tree look different without making it
-simpler to use.
+because Clang tooling discovers them by walking parent directories. Other root
+files are conventional project entry points; moving them would make the tree
+look different without making it simpler to use.
 
 `make linux-smoke` archives the Git-indexed working tree, including local edits,
 into an ephemeral Docker volume. The test container mounts that source volume

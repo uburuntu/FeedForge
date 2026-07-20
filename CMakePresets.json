@@ -106,7 +106,7 @@
     },
     {
       "name": "bench",
-      "displayName": "Post-v0.1 benchmark baseline",
+      "displayName": "Benchmark evaluation baseline",
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
@@ -195,4 +195,3 @@
     }
   ]
 }
-

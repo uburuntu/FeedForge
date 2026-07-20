@@ -37,7 +37,7 @@ cmake --install build/adoption-runtime --config Release \
 After `find_package(FeedForge CONFIG REQUIRED)`, package data is available at:
 
 - `FeedForge_SCHEMA_DIR` for compiler schemas;
-- `FeedForge_DOC_DIR` for this guide and the Section 23 documentation; and
+- `FeedForge_DOC_DIR` for the installed integration and API documentation; and
 - `FeedForge_SKILL_DIR` for the optional Agent Skills.
 
 The documentation and skills are package data only. Canonical targets do not

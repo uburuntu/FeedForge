@@ -35,7 +35,7 @@ jobs:
             artifact: replay
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - name: Configure Clang libFuzzer
         run: >-
           cmake --preset fuzz
@@ -60,7 +60,7 @@ jobs:
           -artifact_prefix="${RUNNER_TEMP}/fuzz-artifacts/${{ matrix.artifact }}/"
       - name: Upload failing input
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: fuzz-${{ matrix.artifact }}-${{ github.run_id }}
           path: ${{ runner.temp }}/fuzz-artifacts/${{ matrix.artifact }}/

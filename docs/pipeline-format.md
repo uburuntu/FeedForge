@@ -1,10 +1,8 @@
 # Pipeline TOML format
 
-> **Status:** This is the normative format-version-1 design from SPEC Sections
-> 10, 13, and 16, not a statement that a particular build has complete
-> parsing, lowering, or emission support. Availability requires the
-> corresponding compiler and release tests. FeedForge is experimental and not
-> exchange-certified.
+This document normatively defines pipeline format version 1. An implementation
+conforms only if it accepts, rejects, resolves, and fingerprints pipelines as
+specified here.
 
 A pipeline selects schema messages and fields, names generated events, chooses
 one cohesive profile, and sets unknown/unselected message policy. It is
@@ -124,16 +122,16 @@ See [Generated API](generated-api.md) for complete outcome and replay semantics.
 
 ## Canonical v0.1 pipelines
 
-The required `itch50_all` pipeline uses namespace
+The required [`itch50_all` pipeline](../pipelines/all_messages.toml) uses namespace
 `feedforge::generated::nasdaq::itch50_all`, schema
 `nasdaq_totalview_itch_5_0`, profile `portable_checked`,
 `unknown_messages = "error"`, and `unselected_messages = "skip"`. It has one
-emit for every message in SPEC Section 15, sorted by unsigned discriminator.
-Each event uses the schema message name and `fields = ["*"]`. This is the
-conformance pipeline; reserved ranges remain validated but are not event
-members.
+emit for every message declared by the named schema, sorted by unsigned
+discriminator. Each event uses the schema message name and `fields = ["*"]`.
+This is the conformance pipeline; reserved ranges remain validated but are not
+event members.
 
-The required `itch50_order_events` pipeline uses namespace
+The required [`itch50_order_events` pipeline](../pipelines/order_events.toml) uses namespace
 `feedforge::generated::nasdaq::itch50_order_events` and the same schema,
 profile, and policies. Its exact projections, in generated member order, are:
 

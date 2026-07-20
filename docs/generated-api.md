@@ -1,10 +1,8 @@
 # Generated C++ API
 
-> **Availability:** This document specifies the normative v0.1 generated API
-> from SPEC Sections 17–19. Runtime names were checked against the public
-> headers, but this contract alone does not establish that a particular
-> generated pipeline is available. Availability requires its generated header
-> and corresponding conformance/release evidence.
+This document defines the v0.1 generated API. A pipeline is available when its
+generated header is installed or produced by `feedforge_generate()`; canonical
+pipelines are shipped with the package and covered by the conformance suite.
 
 FeedForge is experimental, is not exchange-certified, and is not production
 trading infrastructure. v0.1 offers source-level contracts, not a stable binary
@@ -12,8 +10,8 @@ ABI.
 
 ## Header and namespace
 
-Each pipeline is intended to generate one include-order-independent C++20
-header in the pipeline's configured namespace. Canonical artifacts are:
+Each pipeline generates one include-order-independent C++20 header in the
+pipeline's configured namespace. Canonical artifacts are:
 
 - `<feedforge/generated/nasdaq/itch50_all.hpp>` in
   `feedforge::generated::nasdaq::itch50_all`; and

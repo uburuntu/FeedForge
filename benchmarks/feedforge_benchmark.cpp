@@ -814,10 +814,8 @@ void append_distribution(std::ostringstream& output,
     output << "{\"byte_source\":" << bench::json_escape(fixture.byte_source)
            << ",\"file\":" << bench::json_escape(fixture.file_name)
            << ",\"message_name\":" << bench::json_escape(fixture.message_name)
-           << ",\"message_type\":"
-           << bench::json_escape(std::string{fixture.message_type})
-           << ",\"order_events_selected\":"
-           << (fixture.order_events_selected ? "true" : "false")
+           << ",\"message_type\":" << bench::json_escape(std::string{fixture.message_type})
+           << ",\"order_events_selected\":" << (fixture.order_events_selected ? "true" : "false")
            << ",\"review_status\":" << bench::json_escape(fixture.review_status)
            << ",\"reviewer\":" << bench::json_escape(fixture.reviewer)
            << ",\"sha256\":" << bench::json_escape(fixture.sha256)
@@ -931,13 +929,11 @@ void append_distribution(std::ostringstream& output,
 }
 
 void print_human(const report& data) {
-  std::cout << "FeedForge post-v0.1 benchmark contract "
-            << bench::contract_version << '\n'
+  std::cout << "FeedForge benchmark contract " << bench::contract_version << '\n'
             << "  corpus sha256: " << data.corpus.sha256 << '\n'
             << "  build: " << bench::build_config::compiler_id << ' '
-            << bench::build_config::compiler_version << ", "
-            << bench::build_config::build_type << ", "
-            << data.host.os << ' ' << data.host.architecture << '\n'
+            << bench::build_config::compiler_version << ", " << bench::build_config::build_type
+            << ", " << data.host.os << ' ' << data.host.architecture << '\n'
             << "  host: " << data.host.cpu_model << '\n'
             << "  config: samples=" << data.configuration.samples
             << " warmup=" << data.configuration.warmup

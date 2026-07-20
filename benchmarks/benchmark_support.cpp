@@ -40,6 +40,19 @@
 namespace feedforge::benchmark {
 namespace {
 
+inline constexpr std::string_view independent_review_marker{
+    "independent-line-by-line-protocol-review"};
+
+[[nodiscard]] constexpr bool
+has_approved_independent_review(const std::string_view status,
+                                const std::string_view reviewer) noexcept {
+  return status == "approved" && reviewer == independent_review_marker;
+}
+
+static_assert(has_approved_independent_review("approved",
+                                              "independent-line-by-line-protocol-review"));
+static_assert(!has_approved_independent_review("approved", "not independently reviewed"));
+
 constexpr std::array fixture_files{
     std::string_view{"01_system_event.toml"},
     std::string_view{"02_stock_directory.toml"},
@@ -142,7 +155,6 @@ constexpr std::array fixture_files{
   section current = section::top;
   fixture loaded;
   loaded.file_name = std::string{file_name};
-  std::string author;
   std::string order_result;
   std::uint64_t format_version{};
 
@@ -175,8 +187,6 @@ constexpr std::array fixture_files{
         loaded.message_type = value.front();
       } else if (key == "message_name") {
         loaded.message_name = value;
-      } else if (key == "author") {
-        author = value;
       } else if (key == "reviewer") {
         loaded.reviewer = value;
       } else if (key == "review_status") {
@@ -209,8 +219,7 @@ constexpr std::array fixture_files{
   if (loaded.message_name.empty()) {
     invalid("message_name is empty");
   }
-  if (loaded.review_status != "approved" || loaded.reviewer.empty() ||
-      loaded.reviewer == author) {
+  if (!has_approved_independent_review(loaded.review_status, loaded.reviewer)) {
     invalid("fixture lacks an independent approved review");
   }
   if (loaded.byte_source.find("hand-authored") == std::string::npos ||

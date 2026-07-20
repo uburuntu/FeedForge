@@ -14,7 +14,8 @@ concurrency:
 
 # Tier 1 Linux jobs are release-blocking. Tier 2 jobs are expected green and
 # intentionally do not use continue-on-error; any temporary waiver requires the
-# issue, analysis, last-known-green commit, and release-note record from SPEC 22.
+# affected platform/toolchain, analysis, last-known-green commit, user impact,
+# owner, and a time-bounded restoration plan in a tracked issue.
 jobs:
   minimum-runtime-generated:
     name: Tier 1 / minimum ${{ matrix.name }} / C++20 compiler OFF
@@ -30,7 +31,7 @@ jobs:
             package: clang-14
             cxx: clang++-14
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - name: Install minimum compiler
         run: |
           sudo apt-get update
@@ -79,7 +80,7 @@ jobs:
     env:
       CXXFLAGS: ${{ matrix.cxxflags }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - name: Install Clang C++ standard library
         if: matrix.libcxx
         run: |
@@ -117,7 +118,7 @@ jobs:
     env:
       CXXFLAGS: ${{ matrix.cxxflags }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - name: Install Clang C++ standard library
         if: matrix.libcxx
         run: |
@@ -147,7 +148,7 @@ jobs:
     name: Tier 1 / Clang / C++20 no exceptions or RTTI
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - name: Configure explicit generated-runtime gate
         run: >-
           cmake --preset no-exceptions-rtti
@@ -164,7 +165,7 @@ jobs:
     env:
       CXXFLAGS: -stdlib=libc++
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - name: Install Clang C++ standard library
         run: |
           sudo apt-get update
@@ -186,7 +187,7 @@ jobs:
     name: Tier 1 / current GCC / Release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - name: Configure
         run: cmake --preset release -DFEEDFORGE_WARNINGS_AS_ERRORS=ON
       - name: Build
@@ -198,7 +199,7 @@ jobs:
     name: Tier 1 / installed generation consumer / C++20
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - name: Configure and build FeedForge
         run: |
           cmake --preset dev -DFEEDFORGE_WARNINGS_AS_ERRORS=ON
@@ -217,7 +218,7 @@ jobs:
     name: Tier 1 / optional current-Clang RTSan smoke
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - name: Feature-detect RealtimeSanitizer
         run: >-
           cmake --preset rtsan
@@ -234,7 +235,7 @@ jobs:
     name: Tier 2 / macOS arm64 AppleClang / runtime+generated
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - name: Confirm Tier 2 architecture
         run: test "$(uname -m)" = arm64
       - name: Configure compiler-off C++20 project
@@ -251,7 +252,7 @@ jobs:
     name: Tier 2 / Windows x64 MSVC 2022 / runtime+generated
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - name: Configure compiler-off C++20 project
         run: >-
           cmake -S . -B build/msvc

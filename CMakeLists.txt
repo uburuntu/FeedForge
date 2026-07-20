@@ -16,7 +16,7 @@ option(FEEDFORGE_BUILD_COMPILER "Build the feedforgec host compiler" ${PROJECT_I
 option(FEEDFORGE_BUILD_TESTS "Build FeedForge tests" ${PROJECT_IS_TOP_LEVEL})
 option(FEEDFORGE_BUILD_EXAMPLES "Build FeedForge examples" ${PROJECT_IS_TOP_LEVEL})
 option(FEEDFORGE_BUILD_FUZZERS "Build libFuzzer targets" OFF)
-option(FEEDFORGE_BUILD_BENCHMARKS "Build post-v0.1 benchmark tools" OFF)
+option(FEEDFORGE_BUILD_BENCHMARKS "Build benchmark evaluation tools" OFF)
 option(FEEDFORGE_WARNINGS_AS_ERRORS "Treat warnings in FeedForge targets as errors" OFF)
 option(FEEDFORGE_ENABLE_ASAN "Enable AddressSanitizer for FeedForge targets" OFF)
 option(FEEDFORGE_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer for FeedForge targets" OFF)
@@ -291,15 +291,38 @@ install(
   FILES
     LICENSE
     README.md
-    SPEC.md
-    docs/adoption.md
-    docs/adding-a-backend.md
-    docs/architecture.md
-    docs/generated-api.md
-    docs/pipeline-format.md
-    docs/schema-format.md
-    docs/testing.md
+    RELEASE_NOTES.md
+    CONTRIBUTING.md
+    SECURITY.md
   DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/feedforge"
+  COMPONENT Development
+)
+install(
+  DIRECTORY docs/
+  DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/feedforge/docs"
+  COMPONENT Development
+)
+# Preserve source-relative links in the installed documentation bundle.
+install(
+  FILES CMakePresets.json
+  DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/feedforge"
+  COMPONENT Development
+)
+install(
+  DIRECTORY
+    pipelines
+    schemas
+  DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/feedforge"
+  COMPONENT Development
+)
+install(
+  DIRECTORY tests/fixtures/itch50
+  DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/feedforge/tests/fixtures"
+  COMPONENT Development
+)
+install(
+  DIRECTORY .github/workflows
+  DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/feedforge/.github"
   COMPONENT Development
 )
 install(

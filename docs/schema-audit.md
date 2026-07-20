@@ -1,63 +1,67 @@
 # Nasdaq TotalView-ITCH 5.0 schema audit
 
-## Status and scope
+## Scope
 
-This is the author audit for `schemas/nasdaq/totalview_itch_5_0.toml`.
-The author identity is `schema-author-agent`.
-Independently reviewed by `schema-review-agent` on `2026-07-14`; status: `approved`.
-The schema and all 23 fixture manifests were checked directly against the locked official Nasdaq TotalView-ITCH 5.0 and BinaryFILE PDFs.
-This independent review is not exchange certification.
+This document records the source mapping for the
+[Nasdaq TotalView-ITCH 5.0 schema](../schemas/nasdaq/totalview_itch_5_0.toml) and
+its 23 fixture manifests. The schema and fixtures derive from the locked
+official Nasdaq TotalView-ITCH 5.0 and BinaryFILE PDFs. This mapping is not
+exchange certification.
 
-The audit covers all 23 current messages in FeedForge SPEC Section 15. Field
-names are the deterministic snake-case source names used by FeedForge; the
-official name, offset, width, and type are taken directly from the cited Nasdaq
-table. Page numbers below are the printed page numbers in the PDF, not the PDF
-reader's one-based sheet index.
+The mapping and fixture expectations received an independent line-by-line
+review against the locked sources on `2026-07-14`; no discrepancies were found.
+
+The mapping covers all 23 messages represented by the schema. Field names are
+the deterministic snake-case source names used by FeedForge; the official
+name, offset, width, and type come directly from the cited Nasdaq table. Page
+numbers below are the printed page numbers in the PDF, not the PDF reader's
+one-based sheet index.
 
 ## Authoritative source evidence
 
-The official documents were fetched successfully on 2026-07-14 from the exact
-URLs required by FeedForge SPEC Section 6.
+The locked source set contains the official documents fetched on `2026-07-14`
+from these URLs:
 
 | Source | Official URL | Version/revision evidence | SHA-256 | Bytes |
 |---|---|---|---|---:|
 | Nasdaq TotalView-ITCH | <https://www.nasdaqtrader.com/content/technicalsupport/specifications/dataproducts/NQTVITCHSpecification.pdf> | Version 5.0; latest Appendix A entry is 2023-04-28. PDF metadata creation/modification is 2024-02-28 12:21:43 UTC. | `45e0531d1b4b3beb886e9618b2ab824a5aa9bda3a99c0dff03509306e68aacc3` | 1,200,722 |
 | Nasdaq BinaryFILE | <https://www.nasdaqtrader.com/content/technicalsupport/specifications/dataproducts/binaryfile.pdf> | Cover says Version 1.00; latest revision-history entry is 2010-03-30. PDF metadata is 2010-03-31 01:04:37 BST. | `a1f443400728b3ce44953e9ae263e4846fe6ad68420e7a635829872aefdfff60` | 84,384 |
 
-The immutable retrieval metadata is recorded in `schemas/sources.lock.toml`.
-The ITCH audit used the official field tables on printed pages 4-20 and the
-general Data Types rules on printed page 4. BinaryFILE page 1 states that each
-record is a two-byte big-endian payload length followed by the payload; page 1
-also defines a zero-length record as end-of-session and absence of that record
-as incomplete. No community schema was used as a source.
+The immutable retrieval metadata is recorded in the
+[source lock](../schemas/sources.lock.toml). This mapping uses the official ITCH
+field tables on printed pages 4-20 and the general Data Types rules on printed
+page 4. BinaryFILE page 1 states that each record is a two-byte big-endian
+payload length followed by the payload; page 1 also defines a zero-length
+record as end-of-session and absence of that record as incomplete. No community
+schema is a source.
 
 ## Message and fixture inventory
 
-| Type | Schema message | Bytes | Official table | Positive fixture | Review |
-|---|---|---:|---|---|---|
-| `S` | `system_event` | 12 | §1.1 p.4 | `01_system_event.toml` | approved |
-| `R` | `stock_directory` | 39 | §1.2.1 pp.5-8 | `02_stock_directory.toml` | approved |
-| `H` | `stock_trading_action` | 25 | §1.2.2 p.8 | `03_stock_trading_action.toml` | approved |
-| `Y` | `reg_sho_restriction` | 20 | §1.2.3 p.9 | `04_reg_sho_restriction.toml` | approved |
-| `L` | `market_participant_position` | 26 | §1.2.4 pp.9-10 | `05_market_participant_position.toml` | approved |
-| `V` | `mwcb_decline_level` | 35 | §1.2.5.1 p.10 | `06_mwcb_decline_level.toml` | approved |
-| `W` | `mwcb_status` | 12 | §1.2.5.2 pp.10-11 | `07_mwcb_status.toml` | approved |
-| `K` | `ipo_quoting_period_update` | 28 | §1.2.6 p.11 | `08_ipo_quoting_period_update.toml` | approved |
-| `J` | `luld_auction_collar` | 35 | §1.2.7 p.12 | `09_luld_auction_collar.toml` | approved |
-| `h` | `operational_halt` | 21 | §1.2.8 p.12 | `10_operational_halt.toml` | approved |
-| `A` | `add_order` | 36 | §1.3.1 p.13 | `11_add_order.toml` | approved |
-| `F` | `add_order_mpid` | 40 | §1.3.2 p.13 | `12_add_order_mpid.toml` | approved |
-| `E` | `order_executed` | 31 | §1.4.1 p.14 | `13_order_executed.toml` | approved |
-| `C` | `order_executed_with_price` | 36 | §1.4.2 pp.14-15 | `14_order_executed_with_price.toml` | approved |
-| `X` | `order_cancel` | 23 | §1.4.3 p.15 | `15_order_cancel.toml` | approved |
-| `D` | `order_delete` | 19 | §1.4.4 p.15 | `16_order_delete.toml` | approved |
-| `U` | `order_replace` | 35 | §1.4.5 pp.15-16 | `17_order_replace.toml` | approved |
-| `P` | `trade` | 44 | §1.5.1 pp.16-17 | `18_trade.toml` | approved |
-| `Q` | `cross_trade` | 40 | §1.5.2 p.17 | `19_cross_trade.toml` | approved |
-| `B` | `broken_trade` | 19 | §1.5.3 p.18 | `20_broken_trade.toml` | approved |
-| `I` | `net_order_imbalance_indicator` | 50 | §1.6 pp.18-19 | `21_net_order_imbalance_indicator.toml` | approved |
-| `N` | `retail_price_improvement_indicator` | 20 | §1.7 pp.19-20 | `22_retail_price_improvement_indicator.toml` | approved |
-| `O` | `direct_listing_with_capital_raise` | 48 | §1.8 p.20 | `23_direct_listing_with_capital_raise.toml` | approved |
+| Type | Schema message | Bytes | Official table | Positive fixture |
+|---|---|---:|---|---|
+| `S` | `system_event` | 12 | §1.1 p.4 | [`01_system_event.toml`](../tests/fixtures/itch50/01_system_event.toml) |
+| `R` | `stock_directory` | 39 | §1.2.1 pp.5-8 | [`02_stock_directory.toml`](../tests/fixtures/itch50/02_stock_directory.toml) |
+| `H` | `stock_trading_action` | 25 | §1.2.2 p.8 | [`03_stock_trading_action.toml`](../tests/fixtures/itch50/03_stock_trading_action.toml) |
+| `Y` | `reg_sho_restriction` | 20 | §1.2.3 p.9 | [`04_reg_sho_restriction.toml`](../tests/fixtures/itch50/04_reg_sho_restriction.toml) |
+| `L` | `market_participant_position` | 26 | §1.2.4 pp.9-10 | [`05_market_participant_position.toml`](../tests/fixtures/itch50/05_market_participant_position.toml) |
+| `V` | `mwcb_decline_level` | 35 | §1.2.5.1 p.10 | [`06_mwcb_decline_level.toml`](../tests/fixtures/itch50/06_mwcb_decline_level.toml) |
+| `W` | `mwcb_status` | 12 | §1.2.5.2 pp.10-11 | [`07_mwcb_status.toml`](../tests/fixtures/itch50/07_mwcb_status.toml) |
+| `K` | `ipo_quoting_period_update` | 28 | §1.2.6 p.11 | [`08_ipo_quoting_period_update.toml`](../tests/fixtures/itch50/08_ipo_quoting_period_update.toml) |
+| `J` | `luld_auction_collar` | 35 | §1.2.7 p.12 | [`09_luld_auction_collar.toml`](../tests/fixtures/itch50/09_luld_auction_collar.toml) |
+| `h` | `operational_halt` | 21 | §1.2.8 p.12 | [`10_operational_halt.toml`](../tests/fixtures/itch50/10_operational_halt.toml) |
+| `A` | `add_order` | 36 | §1.3.1 p.13 | [`11_add_order.toml`](../tests/fixtures/itch50/11_add_order.toml) |
+| `F` | `add_order_mpid` | 40 | §1.3.2 p.13 | [`12_add_order_mpid.toml`](../tests/fixtures/itch50/12_add_order_mpid.toml) |
+| `E` | `order_executed` | 31 | §1.4.1 p.14 | [`13_order_executed.toml`](../tests/fixtures/itch50/13_order_executed.toml) |
+| `C` | `order_executed_with_price` | 36 | §1.4.2 pp.14-15 | [`14_order_executed_with_price.toml`](../tests/fixtures/itch50/14_order_executed_with_price.toml) |
+| `X` | `order_cancel` | 23 | §1.4.3 p.15 | [`15_order_cancel.toml`](../tests/fixtures/itch50/15_order_cancel.toml) |
+| `D` | `order_delete` | 19 | §1.4.4 p.15 | [`16_order_delete.toml`](../tests/fixtures/itch50/16_order_delete.toml) |
+| `U` | `order_replace` | 35 | §1.4.5 pp.15-16 | [`17_order_replace.toml`](../tests/fixtures/itch50/17_order_replace.toml) |
+| `P` | `trade` | 44 | §1.5.1 pp.16-17 | [`18_trade.toml`](../tests/fixtures/itch50/18_trade.toml) |
+| `Q` | `cross_trade` | 40 | §1.5.2 p.17 | [`19_cross_trade.toml`](../tests/fixtures/itch50/19_cross_trade.toml) |
+| `B` | `broken_trade` | 19 | §1.5.3 p.18 | [`20_broken_trade.toml`](../tests/fixtures/itch50/20_broken_trade.toml) |
+| `I` | `net_order_imbalance_indicator` | 50 | §1.6 pp.18-19 | [`21_net_order_imbalance_indicator.toml`](../tests/fixtures/itch50/21_net_order_imbalance_indicator.toml) |
+| `N` | `retail_price_improvement_indicator` | 20 | §1.7 pp.19-20 | [`22_retail_price_improvement_indicator.toml`](../tests/fixtures/itch50/22_retail_price_improvement_indicator.toml) |
+| `O` | `direct_listing_with_capital_raise` | 48 | §1.8 p.20 | [`23_direct_listing_with_capital_raise.toml`](../tests/fixtures/itch50/23_direct_listing_with_capital_raise.toml) |
 
 Every fixture contains hand-authored readable hex, all expected fields, the
 expected `all_messages` event, the exact `order_events` emit/skip result, and
@@ -68,8 +72,8 @@ deterministic size-minus-one/size-plus-one derivations.
 `uint16`, `uint32`, `uint48`, and `uint64` below are unsigned big-endian wire
 integers. `alpha(N)` is fixed-width ASCII with trailing spaces preserved.
 `Price(4)` and `Price(8)` are unsigned fixed-point integers with scales 4 and 8
-respectively, following the Nasdaq Data Types rule on p.4. The logical/C++ names
-follow FeedForge SPEC §17.2:
+respectively, following the Nasdaq Data Types rule on p.4. The logical/C++
+mapping is:
 
 - `timestamp_ns` -> `feedforge::timestamp_ns`;
 - `stock_locate`, `tracking_number`, `order_reference_number`, `match_number`,
@@ -395,23 +399,25 @@ follow FeedForge SPEC §17.2:
   case-sensitive message type. Lowercase `h` is distinct from uppercase `H`.
 - The only official reserved range is `H` offset 20 width 1; it is represented
   as `reserved`, so it is validated but not projected.
-- `all_messages.toml` contains all 23 emits in unsigned ASCII discriminator
-  order and uses `fields = ["*"]`.
-- `order_events.toml` contains exactly the eight §16.1 projections, with the
-  listed member order.
+- [`all_messages.toml`](../pipelines/all_messages.toml) contains all 23 emits in
+  unsigned ASCII discriminator order and uses `fields = ["*"]`.
+- [`order_events.toml`](../pipelines/order_events.toml) contains exactly the
+  eight projections defined by the
+  [pipeline format](pipeline-format.md#canonical-v01-pipelines), in the listed
+  member order.
 - The 2023 `O` message is present in the schema, all-message pipeline, and a
   dedicated positive/negative fixture manifest.
 
-## Unresolved ambiguity and explicit interpretations
+## Source ambiguities and normative interpretations
 
 1. **`O.near_execution_time` unit:** §1.8 calls this an eight-byte Integer and
    says only “the time at which the near execution price was set.” It does not
-   define seconds, nanoseconds, or another unit. Per FeedForge SPEC §17.2, the
-   schema intentionally leaves it as raw unsigned 64-bit.
+   define seconds, nanoseconds, or another unit. The schema therefore leaves it
+   as raw unsigned 64-bit; no time unit is inferred.
 2. **`R.etp_leverage_factor`:** Appendix A says the 2022 edit supports
    non-integer leverage factors, while the current table still declares a
-   four-byte Integer and describes rounding to an integer. Per FeedForge SPEC
-   §17.2, it remains raw unsigned 32-bit; no decimal scale is invented.
+   four-byte Integer and describes rounding to an integer. It remains raw
+   unsigned 32-bit; no decimal scale is invented.
 3. **`K.ipo_price` wording:** §1.2.6 labels the four-byte field `Price (4)` but
    its prose also contains legacy-looking space-padding language. The general
    Data Types section says integer fields are binary and price precision is
@@ -429,5 +435,3 @@ follow FeedForge SPEC §17.2:
    FeedForge v0.1 preserves unknown alpha values and performs no semantic enum
    rejection. The structural schema therefore does not turn those lists into
    runtime constraints.
-
-The independent review reported no findings in the raw fixture bytes or expected values.

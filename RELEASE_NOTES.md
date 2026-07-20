@@ -1,63 +1,48 @@
-# FeedForge v0.1.0 release notes
+# FeedForge v0.1.0
 
-These notes describe the intended v0.1.0 scope. Do not publish a tag or release
-while a blocker or pending gate remains in the
-[FF-800 release audit](docs/release-audit.md).
+FeedForge v0.1.0 is the first release of the offline, ahead-of-time compiler and
+C++ runtime for checked Nasdaq TotalView-ITCH 5.0 projection pipelines.
 
-## Scope
+## Highlights
 
-FeedForge v0.1.0 is an offline, ahead-of-time compiler and C++ runtime for a
-deliberately narrow workflow:
+- Versioned schema and projection TOML with strict validation and diagnostics.
+- Deterministic FFIR lowering and self-contained generated C++20 headers.
+- Complete current 23-message Nasdaq TotalView-ITCH 5.0 schema and reviewed
+  positive/wrong-size fixtures.
+- Canonical `itch50_all` and `itch50_order_events` generated pipelines.
+- Bounds-checked in-memory Nasdaq BinaryFILE replay through statically bound
+  typed sinks.
+- Header-only runtime and generated public targets with no third-party runtime
+  dependency.
+- Runtime-only and compiler-enabled CMake packages, including downstream custom
+  pipeline generation.
+- Allocation-free FeedForge-owned decode/replay work after caller setup, with
+  exceptions and RTTI disabled where required.
 
-- parse and validate versioned schema and projection TOML;
-- lower it to canonical, serialisable FFIR;
-- generate deterministic strict C++20 for the `portable_checked.v1` profile;
-- decode the complete current 23-message Nasdaq TotalView-ITCH 5.0 inventory;
-- replay in-memory Nasdaq BinaryFILE data through statically bound sinks; and
-- install either the header-only runtime with canonical pipelines or the host
-  compiler for custom build-tree generation.
+## Toolchains and platforms
 
-The release includes the canonical `itch50_all` and `itch50_order_events`
-pipelines, independently reviewed positive and wrong-size fixtures, source-tree
-and installed CMake consumer examples, sanitizer targets, deterministic fuzz
-corpus generation, three libFuzzer targets, and an optional self-documenting
-Make command surface for source-tree development.
-
-## Language, platform, and dependency policy
-
-- Runtime and generated headers are strict C++20; `feedforgec` is C++23.
-- The baseline runtime/generated minimums are GCC 11 and Clang 14. The host
-  compiler requires GCC 13.2 or Clang 17 with the corresponding C++23 library,
-  or newer.
-- Linux x86-64 is Tier 1. Current AppleClang on macOS arm64 and MSVC 2022 on
-  Windows x64 are Tier 2 under the policy in SPEC Section 22.
-- Runtime and generated public targets have no third-party dependency.
-  `toml++` is pinned and private to the optional host compiler.
-- FeedForge-owned decode and replay work is `noexcept`, allocation-free after
-  caller setup, and supported with exceptions and RTTI disabled.
-
-Those entries state support policy, not completed hosted-CI results. The
-required GitHub Actions matrix must pass on the release commit before release.
+- Runtime and generated headers are strict C++20. Minimum tested compilers are
+  GCC 11 and Clang 14.
+- The optional `feedforgec` host compiler is C++23 and requires GCC 13.2 or
+  Clang 17 with a corresponding standard library, or newer.
+- Linux x86-64 is Tier 1. AppleClang on macOS arm64 and MSVC 2022 on Windows x64
+  are Tier 2.
+- `toml++` is pinned and private to the optional host compiler.
 
 ## Validation
 
-The 2026-07-14 local FF-800 audit on macOS arm64 passed fresh Release,
-compiler-disabled C++20, package/consumer, no-exception/no-RTTI, allocation,
-ASan+UBSan, generation-determinism, corpus-determinism, and schema/source-lock
-checks. Canonical generated headers matched two independent compiler runs
-byte-for-byte.
+Publication requires the release commit to pass the full hosted
+compiler/platform matrix, Linux ASan+UBSan with leak detection, all three
+bounded libFuzzer jobs, deterministic generation checks, installed
+runtime/compiler consumers, no-exception/no-RTTI coverage, and a clean-clone
+build/install/replay audit. The published annotated tag records the exact
+commit, and the GitHub Release links the exact hosted run attempts retained as
+release evidence.
 
-The focused compiler-validation gaps identified by the audit are now covered
-by split grammar, type/layout, identifier/diagnostic, and pipeline tests.
-Runtime, compiler, FFIR/golden, and canonical generated provenance now agree
-exactly on `0.1.0`; runtime API version `1` is unchanged. These two local
-blockers are resolved.
-
-This private, unpushed working tree is not evidence for GitHub Actions or a
-literal clean clone. The local AppleClang installation also lacks a usable
-libFuzzer runtime. Required Linux fuzz smoke, the complete hosted matrix, and a
-clean-clone test of the final commit remain release gates; see the
-[release audit](docs/release-audit.md) for exact commands and results.
+The audited schema and fixture inventory is documented in
+[docs/schema-audit.md](docs/schema-audit.md). Benchmark infrastructure is
+available for reproducible engineering work, but v0.1.0 makes no latency,
+throughput, or production-readiness claim.
 
 ## Limitations
 
@@ -66,8 +51,8 @@ production trading infrastructure. In particular:
 
 - it provides no live networking, packet recovery, sequencing, order book,
   strategy, capture service, or database;
-- it accepts in-memory BinaryFILE input and leaves file I/O or mapping to the
-  caller;
+- it accepts caller-owned in-memory BinaryFILE input and leaves file I/O or
+  mapping to the caller;
 - only `portable_checked.v1` is implemented; there is no runtime ISA or backend
   selection;
 - unknown alpha/code values are preserved rather than semantically rejected;

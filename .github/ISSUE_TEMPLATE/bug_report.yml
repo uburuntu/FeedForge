@@ -1,0 +1,69 @@
+name: Bug report
+description: Report a reproducible FeedForge defect
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include proprietary market data, credentials, or security-sensitive details. Follow SECURITY.md for private reports.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Release tag or full commit SHA where the problem occurs.
+      placeholder: v0.1.0 or 0123456789abcdef...
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Host compiler and validation
+        - Generated C++
+        - Runtime decoding
+        - BinaryFILE replay
+        - CMake package and installation
+        - Documentation or examples
+        - CI and developer tooling
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, architecture, compiler, standard library, CMake, and build configuration.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Provide the smallest source, schema/pipeline fragment, and exact commands that reproduce the problem.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include complete diagnostics after removing sensitive paths or data.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Submission checks
+      options:
+        - label: I searched existing issues for the same problem.
+          required: true
+        - label: I removed credentials, proprietary captures, and licensed exchange data.
+          required: true

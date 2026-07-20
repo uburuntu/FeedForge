@@ -1,0 +1,36 @@
+name: Feature request
+description: Propose a focused extension to FeedForge's documented scope
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Describe the concrete offline decoding or integration problem, not only a preferred implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Intended workflow
+      description: Show how a user would configure, build, or call the proposed behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Explain existing workarounds and why an external component cannot own the behavior.
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope checks
+      options:
+        - label: This request preserves checked decoding and deterministic generation.
+          required: true
+        - label: I have not included proprietary market data or credentials.
+          required: true

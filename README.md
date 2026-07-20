@@ -1,17 +1,21 @@
 # FeedForge
 
+[![CI](https://github.com/uburuntu/FeedForge/actions/workflows/ci.yml/badge.svg)](https://github.com/uburuntu/FeedForge/actions/workflows/ci.yml)
+[![Fuzz smoke](https://github.com/uburuntu/FeedForge/actions/workflows/fuzz-smoke.yml/badge.svg)](https://github.com/uburuntu/FeedForge/actions/workflows/fuzz-smoke.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 FeedForge is an ahead-of-time compiler for checked market-data decode
-pipelines. The v0.1 target is deliberately narrow: compile a declarative
+pipelines. Its scope is deliberately narrow: compile a declarative
 Nasdaq TotalView-ITCH 5.0 projection into strict C++20, then replay Nasdaq
 BinaryFILE data through a statically bound sink.
 
-This repository is under active development toward an **offline checked
-v0.1**. FeedForge is experimental, is not exchange-certified, and is not
-production trading infrastructure.
+FeedForge v0.1.0 is an **offline checked decoder**, not a feed handler or trading
+platform. It is experimental, is not exchange-certified, and is not production
+trading infrastructure.
 
 ## Scope
 
-The v0.1 implementation is designed to provide:
+FeedForge v0.1 provides:
 
 - a header-only C++20 runtime exposed as `FeedForge::runtime`;
 - a C++23 host compiler exposed as `FeedForge::compiler`;
@@ -19,9 +23,18 @@ The v0.1 implementation is designed to provide:
 - portable, bounds-checked BinaryFILE and ITCH decoding; and
 - allocation-free FeedForge-owned work on the per-message decode path.
 
+| Surface | Contract |
+|---|---|
+| Runtime and generated code | Strict C++20; GCC 11 or Clang 14 minimum |
+| Host compiler | C++23; GCC 13.2 or Clang 17 with a matching standard library |
+| Platform policy | Linux x86-64 Tier 1; macOS arm64 and MSVC 2022 Tier 2 |
+| Protocol scope | Nasdaq TotalView-ITCH 5.0 over in-memory BinaryFILE |
+| Delivery | Statically bound typed sinks with explicit stop/error outcomes |
+
 Live networking, packet recovery, order-book reconstruction, strategy logic,
-and runtime schema parsing are outside the v0.1 boundary. See [SPEC.md](SPEC.md)
-for the complete contract and current implementation plan.
+and runtime schema parsing are outside the v0.1 boundary. See
+[Architecture](docs/architecture.md) for component boundaries and deliberate
+limits.
 
 ## Requirements
 
@@ -63,7 +76,7 @@ cmake --build build/runtime
 
 ## Generate and replay
 
-The five-minute source-tree flow builds the host compiler, regenerates the two
+The maintainer verification flow builds the host compiler, regenerates the two
 canonical headers from their audited schema and pipelines, checks them
 byte-for-byte, and builds the order-events replay example:
 
@@ -138,15 +151,19 @@ certification, or production-trading guarantees.
 
 - [Architecture](docs/architecture.md)
 - [Development workflow](docs/development.md)
+- [Adoption and integration guide](docs/adoption.md)
 - [Schema format](docs/schema-format.md)
 - [Pipeline format](docs/pipeline-format.md)
 - [Generated C++ API](docs/generated-api.md)
 - [Testing and fixture provenance](docs/testing.md)
-- [Adding a future backend](docs/adding-a-backend.md)
 - [Schema audit](docs/schema-audit.md)
-- [Requirement-to-test traceability](docs/requirements-traceability.md)
-- [FF-800 release audit](docs/release-audit.md)
 - [v0.1.0 release notes](RELEASE_NOTES.md)
+
+## Contributing and security
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development and review expectations.
+Please report security-sensitive findings through the private process in
+[SECURITY.md](SECURITY.md), not a public issue.
 
 ## License
 
