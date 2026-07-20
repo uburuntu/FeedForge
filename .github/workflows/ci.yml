@@ -57,19 +57,34 @@ jobs:
             -DCMAKE_PREFIX_PATH="${RUNNER_TEMP}/feedforge"
           cmake --build build/runtime-consumer --target run-feedforge-consumer
 
+  # Clang 18's concepts feature level hides libstdc++ 13's std::expected, so
+  # compiler-on Clang jobs pair it with the matching libc++ 18 packages.
   current-full:
     name: Tier 1 / current ${{ matrix.name }} / mixed C++20+C++23
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: GCC
+            runner: ubuntu-latest
             cxx: g++
+            cxxflags: ''
+            libcxx: false
           - name: Clang
-            cxx: clang++
+            runner: ubuntu-24.04
+            cxx: clang++-18
+            cxxflags: -stdlib=libc++
+            libcxx: true
+    env:
+      CXXFLAGS: ${{ matrix.cxxflags }}
     steps:
       - uses: actions/checkout@v7
+      - name: Install Clang C++ standard library
+        if: matrix.libcxx
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libc++-18-dev libc++abi-18-dev
       - name: Configure
         run: >-
           cmake --preset dev
@@ -84,17 +99,30 @@ jobs:
 
   generated-cpp23:
     name: Tier 1 / current ${{ matrix.name }} / generated C++23
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: GCC
+            runner: ubuntu-latest
             cxx: g++
+            cxxflags: ''
+            libcxx: false
           - name: Clang
-            cxx: clang++
+            runner: ubuntu-24.04
+            cxx: clang++-18
+            cxxflags: -stdlib=libc++
+            libcxx: true
+    env:
+      CXXFLAGS: ${{ matrix.cxxflags }}
     steps:
       - uses: actions/checkout@v7
+      - name: Install Clang C++ standard library
+        if: matrix.libcxx
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libc++-18-dev libc++abi-18-dev
       - name: Configure generated compatibility probes
         run: >-
           cmake -S . -B build/generated-cpp23 -G Ninja
@@ -132,11 +160,20 @@ jobs:
 
   sanitizers:
     name: Tier 1 / current Clang / ASan+UBSan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    env:
+      CXXFLAGS: -stdlib=libc++
     steps:
       - uses: actions/checkout@v7
+      - name: Install Clang C++ standard library
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libc++-18-dev libc++abi-18-dev
       - name: Configure Clang ASan and UBSan
-        run: cmake --preset sanitizers -DFEEDFORGE_WARNINGS_AS_ERRORS=ON
+        run: >-
+          cmake --preset sanitizers
+          -DCMAKE_CXX_COMPILER=clang++-18
+          -DFEEDFORGE_WARNINGS_AS_ERRORS=ON
       - name: Build
         run: cmake --build --preset sanitizers
       - name: Test
@@ -212,7 +249,7 @@ jobs:
 
   windows-msvc:
     name: Tier 2 / Windows x64 MSVC 2022 / runtime+generated
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v7
       - name: Configure compiler-off C++20 project
