@@ -337,6 +337,7 @@ file(
   "${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/integration/*.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/hardening/*.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/reference/*.cpp"
 )
 list(
   FILTER _feedforge_test_sources
@@ -365,7 +366,7 @@ foreach(_source IN LISTS _feedforge_test_sources)
         "FEEDFORGE_ITCH50_FIXTURE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/fixtures/itch50\""
     )
   endif()
-  if(_relative_source MATCHES "^(hardening|integration)/")
+  if(_relative_source MATCHES "^(hardening|integration|reference)/")
     target_link_libraries(
       "${_target}"
       PRIVATE
@@ -380,6 +381,23 @@ foreach(_source IN LISTS _feedforge_test_sources)
   set_tests_properties("${_test_name}" PROPERTIES TIMEOUT 30)
   if(_relative_source MATCHES "^hardening/")
     set_tests_properties("${_test_name}" PROPERTIES LABELS hardening)
+  endif()
+  if(_relative_source MATCHES "^reference/")
+    set_tests_properties(
+      "${_test_name}"
+      PROPERTIES LABELS "hardening;differential"
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "^(AppleClang|Clang|GNU)$")
+      target_compile_options(
+        "${_target}"
+        PRIVATE
+          -Werror
+          -fno-exceptions
+          -fno-rtti
+      )
+    elseif(MSVC)
+      target_compile_options("${_target}" PRIVATE /WX)
+    endif()
   endif()
   if(_test_name STREQUAL "hardening.allocation")
     set_tests_properties(
@@ -419,6 +437,11 @@ feedforge_add_standalone_fuzz_smoke(
 feedforge_add_standalone_fuzz_smoke(
   decode_one
   fuzz_decode_one.cpp
+  FeedForge::generated::itch50_all
+)
+feedforge_add_standalone_fuzz_smoke(
+  differential_decode
+  fuzz_differential_decode.cpp
   FeedForge::generated::itch50_all
 )
 feedforge_add_standalone_fuzz_smoke(

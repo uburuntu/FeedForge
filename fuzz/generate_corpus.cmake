@@ -32,7 +32,7 @@ function(copy_hex_seeds source_directory destination_directory)
 endfunction()
 
 file(REMOVE_RECURSE "${OUTPUT_DIR}")
-foreach(_kind IN ITEMS binary_file decode_one replay)
+foreach(_kind IN ITEMS binary_file decode_one differential_decode replay)
   file(MAKE_DIRECTORY "${OUTPUT_DIR}/${_kind}")
 endforeach()
 
@@ -47,6 +47,10 @@ copy_hex_seeds(
 copy_hex_seeds(
   "${SOURCE_CORPUS_DIR}/decode_one"
   "${OUTPUT_DIR}/decode_one"
+)
+copy_hex_seeds(
+  "${SOURCE_CORPUS_DIR}/decode_one"
+  "${OUTPUT_DIR}/differential_decode"
 )
 copy_hex_seeds(
   "${SOURCE_CORPUS_DIR}/replay"
@@ -110,6 +114,11 @@ foreach(_fixture IN LISTS _fixtures)
   file(
     WRITE
     "${OUTPUT_DIR}/decode_one/${_decode_seed}"
+    "hex:${_raw_hex}\n"
+  )
+  file(
+    WRITE
+    "${OUTPUT_DIR}/differential_decode/${_decode_seed}"
     "hex:${_raw_hex}\n"
   )
   file(

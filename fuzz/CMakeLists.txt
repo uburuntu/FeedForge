@@ -95,6 +95,15 @@ target_link_libraries(
   PRIVATE FeedForge::generated::itch50_all
 )
 
+feedforge_add_fuzzer(
+  fuzz_differential_decode
+  fuzz_differential_decode.cpp
+)
+target_link_libraries(
+  fuzz_differential_decode
+  PRIVATE FeedForge::generated::itch50_all
+)
+
 feedforge_add_fuzzer(fuzz_replay fuzz_replay.cpp)
 target_link_libraries(
   fuzz_replay
