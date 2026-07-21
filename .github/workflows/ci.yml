@@ -318,6 +318,11 @@ jobs:
       - name: Record native host compiler capability
         shell: pwsh
         run: |
+          $metadata = Get-ChildItem build/msvc/CMakeFiles -Recurse `
+            -Filter CMakeCXXCompiler.cmake | Select-Object -First 1
+          if (-not $metadata) { throw "CMake compiler metadata was not generated" }
+          Get-Content $metadata.FullName | Select-String `
+            'CMAKE_CXX_COMPILER_(ID|VERSION)'
           $compiler = "build/msvc/src/feedforgec/Debug/feedforgec.exe"
           & $compiler --version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
