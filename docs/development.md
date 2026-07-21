@@ -46,8 +46,9 @@ cmake --build --preset dev --target check-generated
 | Canonical generated-byte check | `make generated-check` |
 | Upstream LLVM full suite | `make llvm-dev` |
 | RealtimeSanitizer smoke | `make rtsan` |
-| Three bounded libFuzzer runs | `make fuzz-smoke` |
+| Four bounded libFuzzer runs | `make fuzz-smoke` |
 | Benchmark harness smoke | `make bench-smoke` |
+| Deterministic release assets | `make release-assets-check` |
 | Local install | `make install` |
 | Runtime-only install | `make install-runtime` |
 | Native-architecture Linux smoke | `make linux-smoke` |
@@ -93,6 +94,29 @@ removes only the ignored `build/` and `out/` trees, refuses symlinked roots, and
 will not run while the private holdout or benchmark result archive is present.
 One-off generation commands reject traversal, symlink, and absolute paths that
 resolve outside `build/`.
+
+## Release assets
+
+The standard-library release builder accepts only a full commit ID or an exact
+tag named for the committed project version. It reads committed Git objects, so
+working-tree changes and untracked files cannot enter an archive. Verify it with:
+
+```sh
+make release-assets-check \
+  RELEASE_REVISION="$(git rev-parse HEAD)"
+```
+
+Build publishable assets into a new or empty ignored directory:
+
+```sh
+make release-assets \
+  RELEASE_REVISION="$(git describe --exact-match --tags HEAD)" \
+  RELEASE_OUTPUT_DIR=out/release/current
+```
+
+The command writes normalized `.tar.gz` and `.zip` source archives plus
+`SHA256SUMS`. Archive metadata identifies the resolved commit. The checksum file
+lists only the primary archives and intentionally does not hash itself.
 
 ## LLVM and fuzzing
 

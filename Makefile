@@ -96,6 +96,9 @@ BENCH_COMPARE_JSON ?= $(BUILD_ROOT)/bench/results/comparison.json
 BENCH_COMPARE_CSV ?= $(BUILD_ROOT)/bench/results/comparison.csv
 BENCH_TARGET_ARGS = $(foreach target,$(BENCH_TARGETS),--target "$(target)")
 
+RELEASE_REVISION ?= $(shell $(GIT) rev-parse HEAD 2>/dev/null)
+RELEASE_OUTPUT_DIR ?= $(OUT_ROOT)/release
+
 LINUX_IMAGE ?= ubuntu:24.04
 DOCKER_ARCH = $(if $(filter arm64 aarch64,$(UNAME_M)),arm64,$(if $(filter x86_64 amd64,$(UNAME_M)),amd64,$(UNAME_M)))
 DOCKER_PLATFORM ?= linux/$(DOCKER_ARCH)
@@ -169,7 +172,7 @@ endef
 	llvm-dev llvm-sanitizers rtsan \
 	fuzz-build fuzz-binary-file fuzz-decode-one fuzz-differential-decode fuzz-replay fuzz-smoke \
 	bench-smoke bench-run bench-compare \
-	install install-runtime \
+	release-assets release-assets-check install install-runtime \
 	lint format-check format-changed tidy linux-smoke \
 	clean clobber
 
@@ -231,7 +234,7 @@ doctor: ## Check required tools and report optional local capabilities
 			fi; \
 		done; \
 	fi; \
-	if command -v "$(PYTHON)" >/dev/null 2>&1; then "$(PYTHON)" --version; else printf '  [optional] python3 missing (benchmarks unavailable)\n'; fi; \
+	if command -v "$(PYTHON)" >/dev/null 2>&1; then "$(PYTHON)" --version; else printf '  [optional] python3 missing (benchmark and release tooling unavailable)\n'; fi; \
 	if command -v "$(LLVM_CXX)" >/dev/null 2>&1; then "$(LLVM_CXX)" --version | sed -n '1p'; else printf '  [optional] upstream LLVM missing (fuzz/RTSan unavailable)\n'; fi; \
 	if command -v "$(DOCKER)" >/dev/null 2>&1; then "$(DOCKER)" --version; else printf '  [optional] Docker missing (linux-smoke unavailable)\n'; fi; \
 	test "$$missing" -eq 0
@@ -259,6 +262,8 @@ variables: ## Show the most useful Makefile overrides
 		'FUZZ_SECONDS' '$(FUZZ_SECONDS)' \
 		'BENCH_LABEL' '$(BENCH_LABEL)' \
 		'BENCH_SOURCE_ID' '$(BENCH_SOURCE_ID)' \
+		'RELEASE_REVISION' '$(RELEASE_REVISION)' \
+		'RELEASE_OUTPUT_DIR' '$(RELEASE_OUTPUT_DIR)' \
 		'DOCKER_PLATFORM' '$(DOCKER_PLATFORM)'
 
 ##@ Everyday builds
@@ -320,6 +325,7 @@ verify-all: ## Extend verify with LLVM, RTSan, fuzz, formatting, and benchmarks
 	+@$(MAKE) --no-print-directory rtsan
 	+@$(MAKE) --no-print-directory fuzz-smoke
 	+@$(MAKE) --no-print-directory bench-smoke
+	+@$(MAKE) --no-print-directory release-assets-check
 	+@$(MAKE) --no-print-directory format-check
 
 ##@ Focused tests
@@ -514,6 +520,20 @@ bench-compare: ## Compare explicit BENCH_BASELINE and BENCH_CANDIDATE series
 		--output-csv "$(BENCH_COMPARE_CSV)"
 
 ##@ Packaging
+
+release-assets: ## Build deterministic source archives and SHA256SUMS
+	$(call announce,Building release assets from $(RELEASE_REVISION))
+	@$(PYTHON) tools/release_assets.py build \
+		--repository "$(ROOT)" \
+		--revision "$(RELEASE_REVISION)" \
+		--output-dir "$(RELEASE_OUTPUT_DIR)"
+
+release-assets-check: ## Test release tooling and require byte-identical rebuilds
+	$(call announce,Checking deterministic release assets)
+	@$(PYTHON) tools/release_assets_test.py
+	@$(PYTHON) tools/release_assets.py check \
+		--repository "$(ROOT)" \
+		--revision "$(RELEASE_REVISION)"
 
 install: ## Build INSTALL_PRESET and install to PREFIX
 	$(call announce,Installing $(INSTALL_PRESET) to $(PREFIX))

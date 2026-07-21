@@ -72,3 +72,16 @@ jobs:
           name: fuzz-${{ matrix.artifact }}-${{ github.run_id }}
           path: ${{ runner.temp }}/fuzz-artifacts/${{ matrix.artifact }}/
           if-no-files-found: ignore
+
+  fuzz-required:
+    if: always()
+    name: Fuzz required
+    needs: fuzz-smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every fuzz target to succeed
+        env:
+          FUZZ_RESULT: ${{ needs.fuzz-smoke.result }}
+        run: |
+          printf 'fuzz-smoke: %s\n' "${FUZZ_RESULT}"
+          test "${FUZZ_RESULT}" = success
