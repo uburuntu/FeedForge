@@ -71,8 +71,12 @@ cmake -E make_directory build/generated
 build/feedforge-tools/src/feedforgec/feedforgec compile \
   --schema schemas/nasdaq/totalview_itch_5_0.toml \
   --pipeline config/market_events.toml \
-  --output build/generated/market_events.hpp \
-  --dump-ir build/generated/market_events.ffir.json
+  --output build/generated/market_events.hpp
+
+build/feedforge-tools/src/feedforgec/feedforgec dump-ir \
+  --schema schemas/nasdaq/totalview_itch_5_0.toml \
+  --pipeline config/market_events.toml \
+  --output build/generated/market_events.ffir.json
 ```
 
 The CLI output path is suitable for inspection and determinism checks. Use the

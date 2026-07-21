@@ -290,8 +290,9 @@ during configure with the resolved path and remediation.
   event, returning exactly `feedforge::flow` and marked `noexcept`; assert
   `sink_for_all_selected_events`.
 - `FFPIPE...` or `FFSCHEMA...`: fix the reported object path in TOML.
-  `FFTOML001` is syntax, `FFCLI...` is command use, and `FFIO...` is file I/O.
-  Invalid input/CLI exits `2`; I/O failure exits `3`.
+  `FFTOML001` is syntax, `FFCLI...` is command use, `FFLIMIT001` is a
+  published resource bound, and `FFIO...` is file I/O. Invalid input/CLI exits
+  `2`; I/O failure exits `3`; an unexpected `FFINTERNAL001` failure exits `4`.
 - CLI generation reports `FFIO002`: create the output parent directory first.
 - Replay is `incomplete`: the input ended at a frame boundary without a
   zero-length end marker. Trailing bytes after the marker are a framing error.

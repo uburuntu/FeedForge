@@ -141,6 +141,22 @@ struct chunk_frame_outcome {
   std::uint64_t offset{};
 };
 
+namespace detail {
+
+[[nodiscard]] constexpr std::size_t
+representable_offset_bytes(const std::uint64_t received, const std::size_t requested) noexcept {
+  const std::uint64_t capacity = std::numeric_limits<std::uint64_t>::max() - received;
+  if constexpr (sizeof(std::size_t) <= sizeof(std::uint64_t)) {
+    return capacity >= static_cast<std::uint64_t>(requested) ? requested
+                                                             : static_cast<std::size_t>(capacity);
+  } else {
+    const auto native_capacity = static_cast<std::size_t>(capacity);
+    return requested < native_capacity ? requested : native_capacity;
+  }
+}
+
+} // namespace detail
+
 class chunked_binary_file_cursor {
 public:
   constexpr explicit chunked_binary_file_cursor(std::span<std::byte> scratch) noexcept
@@ -206,19 +222,21 @@ public:
     const std::size_t payload_remaining =
         static_cast<std::size_t>(payload_size_) - payload_received_;
     const std::size_t input_remaining = input.size() - input_position;
-    const std::size_t copy_size =
+    const std::size_t requested_copy_size =
         payload_remaining < input_remaining ? payload_remaining : input_remaining;
-    if (static_cast<std::uint64_t>(copy_size) >
-        std::numeric_limits<std::uint64_t>::max() - received_) {
-      return make_terminal(chunk_frame_status::error, framing_errc::offset_overflow, input_position,
-                           received_);
-    }
+    const std::size_t copy_size =
+        detail::representable_offset_bytes(received_, requested_copy_size);
     for (std::size_t index = 0U; index < copy_size; ++index) {
       scratch_[payload_received_ + index] = input[input_position + index];
     }
     payload_received_ += copy_size;
     input_position += copy_size;
     received_ += copy_size;
+
+    if (copy_size != requested_copy_size) {
+      return make_terminal(chunk_frame_status::error, framing_errc::offset_overflow, input_position,
+                           received_);
+    }
 
     if (payload_received_ != static_cast<std::size_t>(payload_size_)) {
       return make_outcome(chunk_frame_status::needs_input, framing_errc::none, input_position,

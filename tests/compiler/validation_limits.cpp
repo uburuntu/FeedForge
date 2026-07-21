@@ -59,14 +59,17 @@ void test_schema_limits(support::suite& tests) {
 
   support::expect_schema_error(
       tests, base,
-      [](auto& source) { source.messages.assign(limits::messages + 1U, source.messages.front()); },
+      [](auto& source) {
+        const compiler::message_source message = source.messages.front();
+        source.messages.assign(limits::messages + 1U, message);
+      },
       "FFLIMIT001", "schema.messages", "94-message", "too many messages");
 
   support::expect_schema_error(
       tests, base,
       [](auto& source) {
-        source.messages.front().fields.assign(limits::fields_per_message + 1U,
-                                              source.messages.front().fields.front());
+        const compiler::field_source field = source.messages.front().fields.front();
+        source.messages.front().fields.assign(limits::fields_per_message + 1U, field);
       },
       "FFLIMIT001", ".fields", "1024-field", "too many message fields");
 
@@ -103,7 +106,8 @@ void test_pipeline_limits(support::suite& tests) {
   support::expect_pipeline_error(
       tests, base, *schema,
       [](auto& source) {
-        source.projections.assign(limits::projections + 1U, source.projections.front());
+        const compiler::projection_source projection = source.projections.front();
+        source.projections.assign(limits::projections + 1U, projection);
       },
       "FFLIMIT001", "pipeline.emit", "94-projection", "too many projections");
 

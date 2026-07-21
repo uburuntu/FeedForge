@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstddef>
+#include <limits>
 #include <span>
 #include <type_traits>
 #include <utility>
@@ -21,6 +22,11 @@ static_assert(noexcept(std::declval<feedforge::chunked_binary_file_cursor&>().ne
 static_assert(noexcept(std::declval<feedforge::chunked_binary_file_cursor&>().finish()));
 static_assert(noexcept(std::declval<const feedforge::chunked_binary_file_cursor&>().consumed()));
 static_assert(noexcept(std::declval<const feedforge::chunked_binary_file_cursor&>().received()));
+
+constexpr std::uint64_t maximum_offset = std::numeric_limits<std::uint64_t>::max();
+static_assert(feedforge::detail::representable_offset_bytes(maximum_offset - 1U, 2U) == 1U);
+static_assert(feedforge::detail::representable_offset_bytes(maximum_offset - 1U, 1U) == 1U);
+static_assert(feedforge::detail::representable_offset_bytes(maximum_offset, 1U) == 0U);
 
 void check_one_byte_chunks_and_finish() {
   constexpr std::array input{

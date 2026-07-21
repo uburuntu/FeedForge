@@ -109,13 +109,17 @@ cmake -E make_directory build/generated
 build/feedforge-tools/src/feedforgec/feedforgec compile \
   --schema /path/to/schema.toml \
   --pipeline /path/to/pipeline.toml \
-  --output build/generated/pipeline.hpp \
-  --dump-ir build/generated/pipeline.ffir.json
+  --output build/generated/pipeline.hpp
+
+build/feedforge-tools/src/feedforgec/feedforgec dump-ir \
+  --schema /path/to/schema.toml \
+  --pipeline /path/to/pipeline.toml \
+  --output build/generated/pipeline.ffir.json
 ```
 
-The compiler does not create the CLI output's parent directory. It writes output atomically and avoids changing an existing output when validation fails. `--output` must not name the schema or pipeline, and `--dump-ir` must not alias any input or output.
+The compiler does not create the CLI output's parent directory. Each invocation writes one output atomically and avoids changing an existing output when validation fails. `--output` must not name the schema or pipeline.
 
-Successful `validate` and `compile` commands produce no standard output or error text. `--help` and `--version` are standalone commands.
+Successful `validate`, `compile`, and `dump-ir` commands produce no standard output or error text. `--help` and `--version` are standalone commands.
 
 ## Diagnostics and exit status
 
@@ -136,7 +140,9 @@ The position or hint can be absent. Paths use `/` separators; object paths ident
 | `FFCLI...` | Command/option or path-alias misuse |
 | `FFIO001` | Unreadable input |
 | `FFIO002` | Output parent/write/replace failure |
+| `FFLIMIT001` | Published compiler resource limit exceeded |
 | `FFEMIT001` | C++ emission invariant failure |
+| `FFINTERNAL001` | Unexpected internal compiler failure |
 
 Common pipeline codes:
 
@@ -161,7 +167,7 @@ Common pipeline codes:
 | `FFPIPE020` | Field lacks a C++20 representation |
 | `FFPIPE021` | Collision with a generated declaration |
 
-Exit status is `0` for success, `2` for invalid CLI/input/emission, and `3` for input/output I/O failure. Automation should key on exit status and stable code, while still showing the full location, object path, message, and hint to a human.
+Exit status is `0` for success, `2` for invalid CLI/input/emission, `3` for input/output I/O failure, and `4` for an unexpected internal failure. Automation should key on exit status and stable code, while still showing the full location, object path, message, and hint to a human.
 
 ## CMake generation contract
 
@@ -202,14 +208,22 @@ cmake -E make_directory build/determinism/a build/determinism/b
 build/feedforge-tools/src/feedforgec/feedforgec compile \
   --schema /path/to/schema.toml \
   --pipeline /path/to/pipeline.toml \
-  --output build/determinism/a/pipeline.hpp \
-  --dump-ir build/determinism/a/pipeline.ffir.json
+  --output build/determinism/a/pipeline.hpp
 
 build/feedforge-tools/src/feedforgec/feedforgec compile \
   --schema /path/to/schema.toml \
   --pipeline /path/to/pipeline.toml \
-  --output build/determinism/b/pipeline.hpp \
-  --dump-ir build/determinism/b/pipeline.ffir.json
+  --output build/determinism/b/pipeline.hpp
+
+build/feedforge-tools/src/feedforgec/feedforgec dump-ir \
+  --schema /path/to/schema.toml \
+  --pipeline /path/to/pipeline.toml \
+  --output build/determinism/a/pipeline.ffir.json
+
+build/feedforge-tools/src/feedforgec/feedforgec dump-ir \
+  --schema /path/to/schema.toml \
+  --pipeline /path/to/pipeline.toml \
+  --output build/determinism/b/pipeline.ffir.json
 
 cmake -E compare_files \
   build/determinism/a/pipeline.hpp \

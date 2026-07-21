@@ -81,7 +81,7 @@ CODE path:line:column: object.path: message
 hint: optional remediation
 ```
 
-Fix the object named after the location. Do not scrape message prose when a stable code is available. `FFTOML`, `FFSCHEMA`, `FFPIPE`, `FFCLI`, `FFIO`, and `FFEMIT` identify the failing layer.
+Fix the object named after the location. Do not scrape message prose when a stable code is available. `FFTOML`, `FFSCHEMA`, `FFPIPE`, `FFCLI`, `FFIO`, `FFLIMIT`, `FFEMIT`, and `FFINTERNAL` identify the failing layer.
 
 ## 5. Compile and inspect
 
@@ -92,8 +92,12 @@ cmake -E make_directory build/generated
 build/feedforge-tools/src/feedforgec/feedforgec compile \
   --schema schemas/nasdaq/totalview_itch_5_0.toml \
   --pipeline path/to/pipeline.toml \
-  --output build/generated/pipeline.hpp \
-  --dump-ir build/generated/pipeline.ffir.json
+  --output build/generated/pipeline.hpp
+
+build/feedforge-tools/src/feedforgec/feedforgec dump-ir \
+  --schema schemas/nasdaq/totalview_itch_5_0.toml \
+  --pipeline path/to/pipeline.toml \
+  --output build/generated/pipeline.ffir.json
 ```
 
 Inspect the generated header for the configured namespace, event names, exact member order/types, sink concept, metadata fingerprints, decoder, and replay adapter. Treat it as generated output; do not hand-edit it.
