@@ -239,6 +239,12 @@ void test_golden_and_determinism() {
   check_contains(*first, "class chunked_replayer", "caller-buffered chunked replay is emitted");
   check_contains(*first, "cursor_.next(chunk.subspan(position))",
                  "chunked replay consumes arbitrary chunk boundaries");
+  check_contains(*first, "static_assert(feedforge::runtime_api_epoch ==",
+                 "generated header requires an exact runtime API epoch");
+  check_contains(*first, "static_assert(feedforge::runtime_api_revision >=",
+                 "generated header accepts a compatible newer runtime revision");
+  check(first->find("runtime_api_version") == std::string::npos,
+        "generated header does not retain the superseded exact API version");
 
   compiler::ffir_v1 skip_ir = ir;
   skip_ir.pipeline.unknown_messages = "skip";
