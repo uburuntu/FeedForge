@@ -98,10 +98,12 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_CXX_COMPILER": "clang++",
-        "FEEDFORGE_BUILD_COMPILER": "OFF",
+        "FEEDFORGE_BUILD_COMPILER": "ON",
         "FEEDFORGE_BUILD_TESTS": "OFF",
         "FEEDFORGE_BUILD_EXAMPLES": "OFF",
-        "FEEDFORGE_BUILD_FUZZERS": "ON"
+        "FEEDFORGE_BUILD_FUZZERS": "ON",
+        "FEEDFORGE_ENABLE_ASAN": "ON",
+        "FEEDFORGE_ENABLE_UBSAN": "ON"
       }
     },
     {

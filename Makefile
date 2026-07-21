@@ -170,7 +170,8 @@ endef
 	generated-check generated-refresh compiler validate pipeline-compile pipeline-ir \
 	demo replay replay-empty \
 	llvm-dev llvm-sanitizers rtsan \
-	fuzz-build fuzz-binary-file fuzz-decode-one fuzz-differential-decode fuzz-replay fuzz-smoke \
+	fuzz-build fuzz-binary-file fuzz-decode-one fuzz-differential-decode fuzz-replay \
+	fuzz-compiler-schema fuzz-compiler-pipeline fuzz-compiler-compile fuzz-smoke \
 	bench-smoke bench-run bench-compare \
 	release-assets release-assets-check install install-runtime \
 	lint format-check format-changed tidy linux-smoke \
@@ -449,7 +450,7 @@ rtsan: ## Build and run the isolated RealtimeSanitizer smoke target
 
 ##@ Fuzzing
 
-fuzz-build: ## Configure and build all four libFuzzer targets
+fuzz-build: ## Configure and build all seven libFuzzer targets
 	$(require_llvm)
 	$(call announce,Building libFuzzer targets)
 	@$(CMAKE) --preset fuzz -B "$(FUZZ_BUILD_DIR)" \
@@ -468,11 +469,23 @@ fuzz-differential-decode: fuzz-build ## Run bounded independent differential dec
 fuzz-replay: fuzz-build ## Run bounded strict replay fuzzing
 	$(call run_fuzzer,replay)
 
-fuzz-smoke: fuzz-build ## Run all four bounded fuzz targets sequentially
+fuzz-compiler-schema: fuzz-build ## Run bounded compiler schema fuzzing
+	$(call run_fuzzer,compiler_schema)
+
+fuzz-compiler-pipeline: fuzz-build ## Run bounded compiler pipeline fuzzing
+	$(call run_fuzzer,compiler_pipeline)
+
+fuzz-compiler-compile: fuzz-build ## Run bounded compiler lowering and emission fuzzing
+	$(call run_fuzzer,compiler_compile)
+
+fuzz-smoke: fuzz-build ## Run all seven bounded fuzz targets sequentially
 	$(call run_fuzzer,binary_file)
 	$(call run_fuzzer,decode_one)
 	$(call run_fuzzer,differential_decode)
 	$(call run_fuzzer,replay)
+	$(call run_fuzzer,compiler_schema)
+	$(call run_fuzzer,compiler_pipeline)
+	$(call run_fuzzer,compiler_compile)
 
 ##@ Benchmarks
 

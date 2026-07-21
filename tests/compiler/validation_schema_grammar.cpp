@@ -1,6 +1,7 @@
 #include <array>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "validation_test_support.hpp"
 
@@ -252,6 +253,194 @@ void test_toml_types_and_duplicates(support::suite& tests) {
       "TOML integer outside signed 64-bit range");
 }
 
+void test_parser_preflight(support::suite& tests) {
+  constexpr std::string_view malformed_bom{"\xEF\xBB\xBF[!\n", 6U};
+  for (const std::string_view malformed : {std::string_view{"[[\n"}, std::string_view{"[[{\n"},
+                                           std::string_view{"[!\n"}, malformed_bom}) {
+    tests.expect_error(compiler::parse_schema_toml(malformed, "audit/header.toml"), "FFTOML001",
+                       "schema", "table header key",
+                       "malformed table header is rejected before parser preconditions",
+                       std::string_view{"audit/header.toml"});
+  }
+
+  std::string invalid_utf8{"name = \""};
+  invalid_utf8.push_back(static_cast<char>(0xFFU));
+  invalid_utf8.append("\"\n");
+  tests.expect_error(compiler::parse_schema_toml(invalid_utf8, "audit/utf8.toml"), "FFTOML001",
+                     "schema", "valid UTF-8", "malformed UTF-8 is rejected before parsing",
+                     std::string_view{"audit/utf8.toml"});
+
+  std::string invalid_utf8_position{"\xEF\xBB\xBFname = \"\xE2\x82\xAC"};
+  invalid_utf8_position.push_back(static_cast<char>(0xFFU));
+  invalid_utf8_position.append("\"\n");
+  const auto positioned_error =
+      compiler::parse_schema_toml(invalid_utf8_position, "audit/utf8-position.toml");
+  tests.check(!positioned_error &&
+                  positioned_error.error().position == compiler::source_position{1U, 10U},
+              "malformed UTF-8 position counts Unicode code points after the BOM");
+
+  constexpr std::string_view unicode_header_position{
+      "\xEF\xBB\xBF[[\"\xE2\x82\xAC\".cost\xE2\x82\xAC]]\n"};
+  const auto header_position_error =
+      compiler::parse_schema_toml(unicode_header_position, "audit/header-position.toml");
+  tests.check(!header_position_error &&
+                  header_position_error.error().position == compiler::source_position{1U, 11U},
+              "table-header diagnostics count Unicode code points after the BOM");
+
+  constexpr std::string_view unicode_key_position{
+      "\xEF\xBB\xBF\"\xE2\x82\xAC\".cost\xE2\x82\xAC = 1\n"};
+  const auto key_position_error =
+      compiler::parse_schema_toml(unicode_key_position, "audit/key-position.toml");
+  tests.check(!key_position_error &&
+                  key_position_error.error().position == compiler::source_position{1U, 9U},
+              "bare-key diagnostics count Unicode code points after the BOM");
+
+  constexpr std::string_view unicode_array_position{"\xEF\xBB\xBF"
+                                                    "a = [\"\xE2\x82\xAC\",}\n"};
+  const auto array_position_error =
+      compiler::parse_schema_toml(unicode_array_position, "audit/array-position.toml");
+  tests.check(!array_position_error &&
+                  array_position_error.error().position == compiler::source_position{1U, 10U},
+              "array-brace diagnostics count Unicode code points after the BOM");
+
+  constexpr std::string_view invalid_single_line_transition{"name = \"bad\\\n\"\nallowed = [}\n"};
+  const auto single_line_error =
+      compiler::parse_schema_toml(invalid_single_line_transition, "audit/single-line.toml");
+  tests.check(!single_line_error && single_line_error.error().position.has_value() &&
+                  single_line_error.error().position->line == 1U,
+              "invalid single-line strings retain the first parser diagnostic");
+
+  constexpr std::string_view invalid_header_string_transition{"[\"bad\\\n\"x\xE2\x82\xAC = 1\n"};
+  const auto header_string_error =
+      compiler::parse_schema_toml(invalid_header_string_transition, "audit/header-string.toml");
+  tests.check(!header_string_error && header_string_error.error().position.has_value() &&
+                  header_string_error.error().position->line == 1U,
+              "invalid quoted table keys retain the first parser diagnostic");
+
+  constexpr std::string_view nonascii_bare_key{"key\xEF\xBB\x91 = 1\n"};
+  tests.expect_error(compiler::parse_schema_toml(nonascii_bare_key, "audit/nonascii-key.toml"),
+                     "FFTOML001", "schema", "outside strings and comments",
+                     "non-ASCII bare keys are rejected before parser whitespace classification",
+                     std::string_view{"audit/nonascii-key.toml"});
+
+  constexpr std::string_view nonascii_header{"[[messages\xD2\x99ields]]\n"};
+  tests.expect_error(compiler::parse_schema_toml(nonascii_header, "audit/nonascii-header.toml"),
+                     "FFTOML001", "schema", "outside strings and comments",
+                     "non-ASCII table keys are rejected before parser whitespace classification",
+                     std::string_view{"audit/nonascii-header.toml"});
+
+  const std::string unmatched_array_brace =
+      support::replace_once(tests, std::string{support::valid_schema_toml}, "allowed = [\"X\"]",
+                            "allowed = [}", "unmatched array brace");
+  tests.expect_error(compiler::parse_schema_toml(unmatched_array_brace, "audit/array-brace.toml"),
+                     "FFTOML001", "schema", "unmatched '}' inside array",
+                     "array terminator is rejected before parser value preconditions",
+                     std::string_view{"audit/array-brace.toml"});
+
+  std::string bom_schema{"\xEF\xBB\xBF"};
+  bom_schema.append(support::valid_schema_toml);
+  const auto bom_result = compiler::parse_schema_toml(bom_schema, "audit/bom.toml");
+  tests.check(bom_result.has_value() && compiler::validate_schema(*bom_result).has_value(),
+              "UTF-8 BOM passes parser preflight");
+
+  const std::string unicode = support::replace_once(
+      tests, std::string{support::valid_schema_toml},
+      "description = \"Focused validation fixture\"",
+      "description = \"Cost \xE2\x82\xAC\" # currency \xE2\x82\xAC", "Unicode string and comment");
+  const auto unicode_result = compiler::parse_schema_toml(unicode, "audit/unicode.toml");
+  tests.check(unicode_result.has_value() && compiler::validate_schema(*unicode_result).has_value(),
+              "Unicode strings and comments pass parser preflight");
+
+  const std::string quoted =
+      support::replace_once(tests, std::string{support::valid_schema_toml}, "[[types]]",
+                            "[[\"types\"]]", "quoted table key");
+  const auto quoted_result = compiler::parse_schema_toml(quoted, "audit/quoted.toml");
+  tests.check(quoted_result.has_value() && compiler::validate_schema(*quoted_result).has_value(),
+              "quoted table key passes parser preflight");
+
+  const std::string unicode_quoted =
+      support::replace_once(tests, std::string{support::valid_schema_toml}, "[[types]]",
+                            "[[\"typ\xE2\x82\xACs\"]]", "Unicode quoted table key");
+  const auto unicode_quoted_result =
+      compiler::parse_schema_toml(unicode_quoted, "audit/unicode-key.toml");
+  tests.check(!unicode_quoted_result && unicode_quoted_result.error().code == "FFSCHEMA002",
+              "Unicode quoted table keys reach schema validation");
+
+  const std::string unicode_header_comment =
+      support::replace_once(tests, std::string{support::valid_schema_toml}, "[[types]]",
+                            "[[types]] # currency \xE2\x82\xAC", "Unicode table-header comment");
+  const auto unicode_header_comment_result =
+      compiler::parse_schema_toml(unicode_header_comment, "audit/unicode-comment.toml");
+  tests.check(unicode_header_comment_result.has_value() &&
+                  compiler::validate_schema(*unicode_header_comment_result).has_value(),
+              "Unicode table-header comments pass parser preflight");
+
+  const std::string dotted =
+      support::replace_once(tests, std::string{support::valid_schema_toml}, "[[messages.fields]]",
+                            "[[messages.\"fields\"]]", "quoted dotted table key");
+  const auto dotted_result = compiler::parse_schema_toml(dotted, "audit/dotted.toml");
+  tests.check(dotted_result.has_value() && compiler::validate_schema(*dotted_result).has_value(),
+              "quoted dotted table key passes parser preflight");
+
+  const std::string multiline = support::replace_once(
+      tests, std::string{support::valid_schema_toml},
+      "description = \"Focused validation fixture\"",
+      "description = \"\"\"\n[[\n[[{\n[!\n\"\"\"\n# [[{", "multiline header-like text");
+  const auto multiline_result = compiler::parse_schema_toml(multiline, "audit/multiline.toml");
+  tests.check(multiline_result.has_value() &&
+                  compiler::validate_schema(*multiline_result).has_value(),
+              "comments and multiline strings are ignored by header preflight");
+
+  for (const auto& [name, quoted_description] :
+       std::array<std::pair<std::string_view, std::string_view>, 4U>{
+           std::pair{"basic four-quote", "description = \"\"\"Quoted\"\"\"\""},
+           std::pair{"basic five-quote", "description = \"\"\"Quoted\"\"\"\"\""},
+           std::pair{"literal four-quote", "description = '''Quoted''''"},
+           std::pair{"literal five-quote", "description = '''Quoted'''''"}}) {
+    const std::string valid_quote_run =
+        support::replace_once(tests, std::string{support::valid_schema_toml},
+                              "description = \"Focused validation fixture\"", quoted_description,
+                              std::string{name} + " multiline quote run");
+    const auto valid_quote_run_result =
+        compiler::parse_schema_toml(valid_quote_run, "audit/quote-run.toml");
+    tests.check(valid_quote_run_result.has_value() &&
+                    compiler::validate_schema(*valid_quote_run_result).has_value(),
+                std::string{name} + " multiline strings accept a quote before the delimiter");
+
+    std::string unicode_key_description{quoted_description};
+    unicode_key_description.append("\n\"cost\xE2\x82\xAC\" = 1");
+    const std::string unicode_key_after_quote_run = support::replace_once(
+        tests, std::string{support::valid_schema_toml},
+        "description = \"Focused validation fixture\"", unicode_key_description,
+        std::string{name} + " multiline Unicode key quote run");
+    tests.expect_error(
+        compiler::parse_schema_toml(unicode_key_after_quote_run, "audit/quote-run-key.toml"),
+        "FFSCHEMA002", "schema.cost\xE2\x82\xAC", "unknown key",
+        std::string{name} + " multiline close exposes Unicode quoted keys to schema validation",
+        std::string_view{"audit/quote-run-key.toml"});
+
+    std::string malformed_description{quoted_description};
+    malformed_description.append("\nallowed = [}");
+    const std::string malformed_after_quote_run =
+        support::replace_once(tests, std::string{support::valid_schema_toml},
+                              "description = \"Focused validation fixture\"", malformed_description,
+                              std::string{name} + " multiline guard quote run");
+    tests.expect_error(
+        compiler::parse_schema_toml(malformed_after_quote_run, "audit/quote-run-guard.toml"),
+        "FFTOML001", "schema", "unmatched '}' inside array",
+        std::string{name} + " multiline close does not hide malformed arrays",
+        std::string_view{"audit/quote-run-guard.toml"});
+  }
+
+  const std::string nested_array = support::replace_once(
+      tests, std::string{support::valid_schema_toml}, "[[types]]",
+      "unknown_top = [\n  [{ value = \"ok\" }]\n]\n\n[[types]]", "nested array at line start");
+  tests.expect_error(compiler::parse_schema_toml(nested_array, "audit/array.toml"), "FFSCHEMA002",
+                     "schema.unknown_top", "unknown key",
+                     "nested arrays are not mistaken for table headers",
+                     std::string_view{"audit/array.toml"});
+}
+
 void test_table_shapes_and_optional_value_types(support::suite& tests) {
   const std::string base{support::valid_schema_toml};
   const std::size_t type_start = base.find("[[types]]");
@@ -486,6 +675,7 @@ int main() {
   test_required_top_level_keys(tests);
   test_required_nested_keys(tests);
   test_toml_types_and_duplicates(tests);
+  test_parser_preflight(tests);
   test_table_shapes_and_optional_value_types(tests);
   test_positive_grammar(tests);
   return tests.finish("schema grammar");

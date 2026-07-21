@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.25)
 
-foreach(_required IN ITEMS FIXTURE_DIR SOURCE_CORPUS_DIR OUTPUT_DIR)
+foreach(_required IN ITEMS
+    FIXTURE_DIR
+    COMPILER_FIXTURE_DIR
+    SOURCE_CORPUS_DIR
+    OUTPUT_DIR)
   if(NOT DEFINED ${_required} OR "${${_required}}" STREQUAL "")
     message(FATAL_ERROR "generate_corpus.cmake requires ${_required}")
   endif()
@@ -32,7 +36,14 @@ function(copy_hex_seeds source_directory destination_directory)
 endfunction()
 
 file(REMOVE_RECURSE "${OUTPUT_DIR}")
-foreach(_kind IN ITEMS binary_file decode_one differential_decode replay)
+foreach(_kind IN ITEMS
+    binary_file
+    compiler_compile
+    compiler_pipeline
+    compiler_schema
+    decode_one
+    differential_decode
+    replay)
   file(MAKE_DIRECTORY "${OUTPUT_DIR}/${_kind}")
 endforeach()
 
@@ -57,6 +68,129 @@ copy_hex_seeds(
   "${OUTPUT_DIR}/replay"
 )
 
+foreach(_name IN ITEMS
+    invalid_schema_unknown_key.toml
+    valid_schema.toml
+    valid_schema_reordered.toml)
+  file(
+    COPY_FILE
+    "${COMPILER_FIXTURE_DIR}/${_name}"
+    "${OUTPUT_DIR}/compiler_schema/${_name}"
+    ONLY_IF_DIFFERENT
+  )
+endforeach()
+file(
+  WRITE
+  "${OUTPUT_DIR}/compiler_schema/malformed.toml"
+  "format_version = [\n"
+)
+file(
+  WRITE
+  "${OUTPUT_DIR}/compiler_schema/invalid-table-header.toml"
+  "[[\nname = \"unreachable\"\n"
+)
+string(ASCII 239 187 191 _utf8_bom)
+string(ASCII 255 _invalid_utf8)
+file(
+  WRITE
+  "${OUTPUT_DIR}/compiler_schema/invalid-bom-table-header.toml"
+  "${_utf8_bom}[!\n"
+)
+file(
+  WRITE
+  "${OUTPUT_DIR}/compiler_schema/invalid-utf8.toml"
+  "name = \"${_invalid_utf8}\"\n"
+)
+file(
+  WRITE
+  "${OUTPUT_DIR}/compiler_schema/invalid-array-terminator.toml"
+  "allowed = [}\n"
+)
+file(
+  WRITE
+  "${OUTPUT_DIR}/compiler_schema/multiline-basic-transition.toml"
+  "description = \"\"\"quoted\"\"\"\"\n[!\n"
+)
+
+foreach(_name IN ITEMS
+    invalid_pipeline_wildcard.toml
+    valid_pipeline.toml
+    valid_pipeline_reordered.toml)
+  file(
+    COPY_FILE
+    "${COMPILER_FIXTURE_DIR}/${_name}"
+    "${OUTPUT_DIR}/compiler_pipeline/${_name}"
+    ONLY_IF_DIFFERENT
+  )
+endforeach()
+file(
+  WRITE
+  "${OUTPUT_DIR}/compiler_pipeline/malformed.toml"
+  "format_version = [\n"
+)
+file(
+  WRITE
+  "${OUTPUT_DIR}/compiler_pipeline/invalid-table-header.toml"
+  "[[\nname = \"unreachable\"\n"
+)
+file(
+  WRITE
+  "${OUTPUT_DIR}/compiler_pipeline/invalid-bom-table-header.toml"
+  "${_utf8_bom}[!\n"
+)
+file(
+  WRITE
+  "${OUTPUT_DIR}/compiler_pipeline/invalid-utf8.toml"
+  "name = \"${_invalid_utf8}\"\n"
+)
+file(
+  WRITE
+  "${OUTPUT_DIR}/compiler_pipeline/invalid-array-terminator.toml"
+  "fields = [}\n"
+)
+file(
+  WRITE
+  "${OUTPUT_DIR}/compiler_pipeline/multiline-literal-transition.toml"
+  "name = '''quoted''''\n[!\n"
+)
+
+file(READ "${COMPILER_FIXTURE_DIR}/valid_schema.toml" _compiler_schema)
+file(READ "${COMPILER_FIXTURE_DIR}/valid_schema_reordered.toml" _compiler_schema_reordered)
+file(READ "${COMPILER_FIXTURE_DIR}/valid_pipeline.toml" _compiler_pipeline)
+file(READ "${COMPILER_FIXTURE_DIR}/valid_pipeline_reordered.toml" _compiler_pipeline_reordered)
+file(READ "${COMPILER_FIXTURE_DIR}/invalid_pipeline_wildcard.toml" _compiler_pipeline_invalid)
+set(_compiler_separator "\n# --- FEEDFORGE FUZZ PIPELINE ---\n")
+file(
+  WRITE
+  "${OUTPUT_DIR}/compiler_compile/valid.ffcase"
+  "${_compiler_schema}${_compiler_separator}${_compiler_pipeline}"
+)
+file(
+  WRITE
+  "${OUTPUT_DIR}/compiler_compile/valid-reordered.ffcase"
+  "${_compiler_schema_reordered}${_compiler_separator}${_compiler_pipeline_reordered}"
+)
+file(
+  WRITE
+  "${OUTPUT_DIR}/compiler_compile/invalid-pipeline.ffcase"
+  "${_compiler_schema}${_compiler_separator}${_compiler_pipeline_invalid}"
+)
+file(
+  WRITE
+  "${OUTPUT_DIR}/compiler_compile/malformed-pipeline.ffcase"
+  "${_compiler_schema}${_compiler_separator}format_version = [\n"
+)
+file(
+  WRITE
+  "${OUTPUT_DIR}/compiler_compile/invalid-schema-header.ffcase"
+  "[[\n${_compiler_separator}${_compiler_pipeline}"
+)
+file(
+  WRITE
+  "${OUTPUT_DIR}/compiler_compile/multiline-schema-transition.ffcase"
+  "description = \"\"\"quoted\"\"\"\"\n[!\n${_compiler_separator}${_compiler_pipeline}"
+)
+
 file(GLOB _fixtures LIST_DIRECTORIES false "${FIXTURE_DIR}/*.toml")
 list(SORT _fixtures)
 list(LENGTH _fixtures _fixture_count)
@@ -64,8 +198,10 @@ if(NOT _fixture_count EQUAL 23)
   message(FATAL_ERROR "Expected 23 reviewed ITCH fixtures, found ${_fixture_count}")
 endif()
 
-set(_manifest
-    "Generated from reviewed raw_hex fields in tests/fixtures/itch50.\n")
+string(CONCAT _manifest
+    "Compiler valid and paired seeds use tests/fixtures/compiler; "
+    "synthetic malformed and transition seeds are defined in fuzz/generate_corpus.cmake.\n"
+    "Runtime seeds are generated from reviewed raw_hex fields in tests/fixtures/itch50.\n")
 set(_all_framed "hex:")
 foreach(_fixture IN LISTS _fixtures)
   file(READ "${_fixture}" _contents)

@@ -18,7 +18,9 @@ concurrency:
 jobs:
   fuzz-smoke:
     name: ${{ matrix.name }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    env:
+      CXXFLAGS: -stdlib=libc++
     strategy:
       fail-fast: false
       matrix:
@@ -39,13 +41,29 @@ jobs:
             executable: build/fuzz/fuzz/fuzz_replay
             corpus: build/fuzz/fuzz/corpus/replay
             artifact: replay
+          - name: Compiler schema frontend
+            executable: build/fuzz/fuzz/fuzz_compiler_schema
+            corpus: build/fuzz/fuzz/corpus/compiler_schema
+            artifact: compiler-schema
+          - name: Compiler pipeline frontend
+            executable: build/fuzz/fuzz/fuzz_compiler_pipeline
+            corpus: build/fuzz/fuzz/corpus/compiler_pipeline
+            artifact: compiler-pipeline
+          - name: Compiler lowering and emission
+            executable: build/fuzz/fuzz/fuzz_compiler_compile
+            corpus: build/fuzz/fuzz/corpus/compiler_compile
+            artifact: compiler-compile
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Clang C++ standard library
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libc++-18-dev libc++abi-18-dev
       - name: Configure Clang libFuzzer
         run: >-
           cmake --preset fuzz
-          -DCMAKE_CXX_COMPILER=clang++
+          -DCMAKE_CXX_COMPILER=clang++-18
           -DFEEDFORGE_WARNINGS_AS_ERRORS=ON
       - name: Build all required fuzz targets
         run: cmake --build --preset fuzz

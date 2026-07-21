@@ -96,8 +96,8 @@ FeedForge v0.3 provides:
 - bounded schema and pipeline compilation with stable diagnostics;
 - portable, bounds-checked one-shot and caller-buffered chunked BinaryFILE
   decoding;
-- an independently transcribed differential decode oracle and four libFuzzer
-  targets; and
+- an independently transcribed differential decode oracle and seven libFuzzer
+  targets spanning the runtime and compiler frontends; and
 - allocation-free FeedForge-owned work on the per-message decode path.
 
 | Surface | Contract |

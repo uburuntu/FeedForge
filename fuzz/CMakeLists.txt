@@ -31,6 +31,11 @@ file(
   "${PROJECT_SOURCE_DIR}/tests/fixtures/itch50/*.toml"
 )
 file(
+  GLOB _feedforge_compiler_fixtures
+  CONFIGURE_DEPENDS
+  "${PROJECT_SOURCE_DIR}/tests/fixtures/compiler/*.toml"
+)
+file(
   GLOB_RECURSE _feedforge_source_corpus
   CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/corpus/*.hex"
@@ -41,6 +46,7 @@ set_property(
   PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/generate_corpus.cmake"
     ${_feedforge_reviewed_fixtures}
+    ${_feedforge_compiler_fixtures}
     ${_feedforge_source_corpus}
 )
 
@@ -49,6 +55,7 @@ execute_process(
   COMMAND
     "${CMAKE_COMMAND}"
     "-DFIXTURE_DIR=${PROJECT_SOURCE_DIR}/tests/fixtures/itch50"
+    "-DCOMPILER_FIXTURE_DIR=${PROJECT_SOURCE_DIR}/tests/fixtures/compiler"
     "-DSOURCE_CORPUS_DIR=${CMAKE_CURRENT_SOURCE_DIR}/corpus"
     "-DOUTPUT_DIR=${_feedforge_fuzz_corpus_dir}"
     -P
@@ -109,3 +116,20 @@ target_link_libraries(
   fuzz_replay
   PRIVATE FeedForge::generated::itch50_all
 )
+
+if(NOT TARGET feedforge_compiler_frontend)
+  message(
+    FATAL_ERROR
+    "Compiler fuzz targets require FEEDFORGE_BUILD_COMPILER=ON"
+  )
+endif()
+
+foreach(_compiler_fuzzer IN ITEMS schema pipeline compile)
+  set(_target "fuzz_compiler_${_compiler_fuzzer}")
+  feedforge_add_fuzzer(
+    "${_target}"
+    "fuzz_compiler_${_compiler_fuzzer}.cpp"
+  )
+  target_compile_features("${_target}" PRIVATE cxx_std_23)
+  target_link_libraries("${_target}" PRIVATE feedforge_compiler_frontend)
+endforeach()

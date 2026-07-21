@@ -64,7 +64,7 @@ byte.
 | Canonical generated-byte check | `make generated-check` |
 | Upstream LLVM full suite | `make llvm-dev` |
 | RealtimeSanitizer smoke | `make rtsan` |
-| Four bounded libFuzzer runs | `make fuzz-smoke` |
+| Seven bounded libFuzzer runs | `make fuzz-smoke` |
 | Benchmark harness smoke | `make bench-smoke` |
 | Deterministic release assets | `make release-assets-check` |
 | Local install | `make install` |

@@ -9,6 +9,7 @@
 #include <ranges>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include <toml++/toml.hpp>
 
@@ -18,6 +19,343 @@ namespace feedforge::compiler {
 namespace {
 
 namespace fs = std::filesystem;
+inline constexpr std::string_view utf8_bom{"\xEF\xBB\xBF", 3U};
+
+enum class lexical_state {
+  normal,
+  basic_string,
+  literal_string,
+  multiline_basic_string,
+  multiline_literal_string,
+  comment,
+};
+
+[[nodiscard]] bool starts_with_at(const std::string_view text, const std::size_t offset,
+                                  const std::string_view token) noexcept {
+  return offset <= text.size() && token.size() <= text.size() - offset &&
+         text.substr(offset, token.size()) == token;
+}
+
+[[nodiscard]] bool is_bare_key_start(const char character) noexcept {
+  return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') ||
+         (character >= '0' && character <= '9') || character == '_' || character == '-';
+}
+
+[[nodiscard]] std::size_t repeated_character_count(const std::string_view text,
+                                                   const std::size_t offset,
+                                                   const char character) noexcept {
+  std::size_t end = offset;
+  while (end < text.size() && text[end] == character) {
+    ++end;
+  }
+  return end - offset;
+}
+
+[[nodiscard]] bool is_utf8_continuation(const unsigned char byte) noexcept {
+  return byte >= 0x80U && byte <= 0xBFU;
+}
+
+[[nodiscard]] std::optional<std::size_t> invalid_utf8_offset(const std::string_view text) noexcept {
+  for (std::size_t index = 0U; index < text.size();) {
+    const auto first = static_cast<unsigned char>(text[index]);
+    if (first <= 0x7FU) {
+      ++index;
+      continue;
+    }
+
+    if (first >= 0xC2U && first <= 0xDFU) {
+      if (index + 1U >= text.size() ||
+          !is_utf8_continuation(static_cast<unsigned char>(text[index + 1U]))) {
+        return index;
+      }
+      index += 2U;
+      continue;
+    }
+
+    if (first >= 0xE0U && first <= 0xEFU) {
+      if (index + 2U >= text.size()) {
+        return index;
+      }
+      const auto second = static_cast<unsigned char>(text[index + 1U]);
+      const auto third = static_cast<unsigned char>(text[index + 2U]);
+      const bool valid_second = first == 0xE0U   ? second >= 0xA0U && second <= 0xBFU
+                                : first == 0xEDU ? second >= 0x80U && second <= 0x9FU
+                                                 : is_utf8_continuation(second);
+      if (!valid_second || !is_utf8_continuation(third)) {
+        return index;
+      }
+      index += 3U;
+      continue;
+    }
+
+    if (first >= 0xF0U && first <= 0xF4U) {
+      if (index + 3U >= text.size()) {
+        return index;
+      }
+      const auto second = static_cast<unsigned char>(text[index + 1U]);
+      const bool valid_second = first == 0xF0U   ? second >= 0x90U && second <= 0xBFU
+                                : first == 0xF4U ? second >= 0x80U && second <= 0x8FU
+                                                 : is_utf8_continuation(second);
+      if (!valid_second || !is_utf8_continuation(static_cast<unsigned char>(text[index + 2U])) ||
+          !is_utf8_continuation(static_cast<unsigned char>(text[index + 3U]))) {
+        return index;
+      }
+      index += 4U;
+      continue;
+    }
+
+    return index;
+  }
+  return std::nullopt;
+}
+
+[[nodiscard]] source_mark mark_at_offset(const std::string_view text,
+                                         const std::size_t offset) noexcept {
+  std::size_t line = 1U;
+  std::size_t column = 1U;
+  const std::size_t document_start = starts_with_at(text, 0U, utf8_bom) ? utf8_bom.size() : 0U;
+  for (std::size_t index = document_start; index < offset && index < text.size(); ++index) {
+    if (text[index] == '\n') {
+      ++line;
+      column = 1U;
+    } else if (!is_utf8_continuation(static_cast<unsigned char>(text[index]))) {
+      ++column;
+    }
+  }
+  return source_mark{source_position{line, column}};
+}
+
+[[nodiscard]] result<bool> validate_table_header_characters(const std::string_view text,
+                                                            const std::size_t header_start,
+                                                            const std::string_view source_path,
+                                                            const std::string_view object_path) {
+  lexical_state state = lexical_state::normal;
+  for (std::size_t index = header_start; index < text.size() && text[index] != '\n'; ++index) {
+    const char current = text[index];
+    if (state == lexical_state::basic_string) {
+      if (current == '\\' && index + 1U < text.size()) {
+        if (text[index + 1U] == '\n') {
+          return false;
+        }
+        ++index;
+      } else if (current == '"') {
+        state = lexical_state::normal;
+      }
+      continue;
+    }
+    if (state == lexical_state::literal_string) {
+      if (current == '\'') {
+        state = lexical_state::normal;
+      }
+      continue;
+    }
+    if (current == '#') {
+      break;
+    }
+    if (current == '"') {
+      state = lexical_state::basic_string;
+      continue;
+    }
+    if (current == '\'') {
+      state = lexical_state::literal_string;
+      continue;
+    }
+    if (static_cast<unsigned char>(current) >= 0x80U) {
+      return std::unexpected(
+          make_diagnostic("FFTOML001", std::string(source_path), mark_at_offset(text, index),
+                          std::string(object_path),
+                          "non-ASCII characters outside strings and comments are not valid TOML"));
+    }
+  }
+  return state == lexical_state::normal;
+}
+
+[[nodiscard]] result<void> validate_parser_preconditions(const std::string_view text,
+                                                         const std::string_view source_path,
+                                                         const std::string_view object_path) {
+  const std::size_t document_start = starts_with_at(text, 0U, utf8_bom) ? utf8_bom.size() : 0U;
+  lexical_state state = lexical_state::normal;
+  std::size_t array_depth = 0U;
+  std::vector<char> containers;
+  containers.reserve(limits::toml_nested_values);
+  bool at_line_start = true;
+
+  for (std::size_t index = document_start; index < text.size();) {
+    const char current = text[index];
+    if (state == lexical_state::comment) {
+      if (current == '\n') {
+        state = lexical_state::normal;
+        at_line_start = true;
+      }
+      ++index;
+      continue;
+    }
+    if (state == lexical_state::basic_string) {
+      if (current == '\n' ||
+          (current == '\\' && index + 1U < text.size() && text[index + 1U] == '\n')) {
+        return {};
+      }
+      if (current == '\\' && index + 1U < text.size()) {
+        index += 2U;
+      } else {
+        if (current == '"') {
+          state = lexical_state::normal;
+        }
+        ++index;
+      }
+      continue;
+    }
+    if (state == lexical_state::literal_string) {
+      if (current == '\n') {
+        return {};
+      }
+      if (current == '\'') {
+        state = lexical_state::normal;
+      }
+      ++index;
+      continue;
+    }
+    if (state == lexical_state::multiline_basic_string) {
+      if (current == '\\' && index + 1U < text.size()) {
+        if (text[index + 1U] == '\n') {
+          at_line_start = true;
+        }
+        index += 2U;
+      } else if (current == '"') {
+        const std::size_t quote_count = repeated_character_count(text, index, current);
+        if (quote_count >= 3U) {
+          state = lexical_state::normal;
+          at_line_start = false;
+        }
+        index += quote_count;
+      } else {
+        if (current == '\n') {
+          at_line_start = true;
+        }
+        ++index;
+      }
+      continue;
+    }
+    if (state == lexical_state::multiline_literal_string) {
+      if (current == '\'') {
+        const std::size_t quote_count = repeated_character_count(text, index, current);
+        if (quote_count >= 3U) {
+          state = lexical_state::normal;
+          at_line_start = false;
+        }
+        index += quote_count;
+      } else {
+        if (current == '\n') {
+          at_line_start = true;
+        }
+        ++index;
+      }
+      continue;
+    }
+
+    if (current == '\n') {
+      at_line_start = true;
+      ++index;
+      continue;
+    }
+    if (current == '#') {
+      state = lexical_state::comment;
+      ++index;
+      continue;
+    }
+    if (current == '"') {
+      if (starts_with_at(text, index, "\"\"\"")) {
+        state = lexical_state::multiline_basic_string;
+        index += 3U;
+      } else {
+        state = lexical_state::basic_string;
+        ++index;
+      }
+      at_line_start = false;
+      continue;
+    }
+    if (current == '\'') {
+      if (starts_with_at(text, index, "'''")) {
+        state = lexical_state::multiline_literal_string;
+        index += 3U;
+      } else {
+        state = lexical_state::literal_string;
+        ++index;
+      }
+      at_line_start = false;
+      continue;
+    }
+    if (static_cast<unsigned char>(current) >= 0x80U) {
+      return std::unexpected(
+          make_diagnostic("FFTOML001", std::string(source_path), mark_at_offset(text, index),
+                          std::string(object_path),
+                          "non-ASCII characters outside strings and comments are not valid TOML"));
+    }
+    if (at_line_start && (current == ' ' || current == '\t' || current == '\r')) {
+      ++index;
+      continue;
+    }
+
+    if (at_line_start) {
+      at_line_start = false;
+      if (current == '[' && array_depth == 0U) {
+        std::size_t key_start = index + 1U;
+        while (key_start < text.size() && (text[key_start] == ' ' || text[key_start] == '\t')) {
+          ++key_start;
+        }
+        const bool spaced_before_second = key_start != index + 1U;
+        if (key_start < text.size() && text[key_start] == '[') {
+          if (spaced_before_second) {
+            while (index < text.size() && text[index] != '\n') {
+              ++index;
+            }
+            continue;
+          }
+          ++key_start;
+          while (key_start < text.size() && (text[key_start] == ' ' || text[key_start] == '\t')) {
+            ++key_start;
+          }
+        }
+        if (key_start < text.size() && text[key_start] != ']' && text[key_start] != '"' &&
+            text[key_start] != '\'' && !is_bare_key_start(text[key_start])) {
+          return std::unexpected(
+              make_diagnostic("FFTOML001", std::string(source_path),
+                              mark_at_offset(text, key_start), std::string(object_path),
+                              "table header key must begin with a bare-key character or quote"));
+        }
+        auto checked = validate_table_header_characters(text, index, source_path, object_path);
+        if (!checked) {
+          return std::unexpected(std::move(checked.error()));
+        }
+        if (!*checked) {
+          return {};
+        }
+        while (index < text.size() && text[index] != '\n') {
+          ++index;
+        }
+        continue;
+      }
+    }
+
+    if (current == '[') {
+      containers.push_back(current);
+      ++array_depth;
+    } else if (current == '{') {
+      containers.push_back(current);
+    } else if (current == ']' && !containers.empty() && containers.back() == '[') {
+      containers.pop_back();
+      --array_depth;
+    } else if (current == '}' && !containers.empty() && containers.back() == '{') {
+      containers.pop_back();
+    } else if (current == '}' && !containers.empty() && containers.back() == '[') {
+      return std::unexpected(make_diagnostic("FFTOML001", std::string(source_path),
+                                             mark_at_offset(text, index), std::string(object_path),
+                                             "unmatched '}' inside array"));
+    }
+    ++index;
+  }
+  return {};
+}
 
 [[nodiscard]] source_mark mark_from(const toml::source_region& region) {
   return source_mark{source_position{
@@ -98,6 +436,14 @@ void count_toml_nodes(const toml::node& node, std::size_t& count) {
     return std::unexpected(
         limit_problem(source_path, source_mark{}, std::string(object_path),
                       std::string(object_path) + " source exceeds the 1048576-byte limit"));
+  }
+  if (const auto invalid = invalid_utf8_offset(text); invalid.has_value()) {
+    return std::unexpected(make_diagnostic("FFTOML001", std::string(source_path),
+                                           mark_at_offset(text, *invalid), std::string(object_path),
+                                           "source is not valid UTF-8"));
+  }
+  if (auto checked = validate_parser_preconditions(text, source_path, object_path); !checked) {
+    return std::unexpected(std::move(checked.error()));
   }
 #if TOML_EXCEPTIONS
   try {

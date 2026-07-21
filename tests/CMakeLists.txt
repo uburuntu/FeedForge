@@ -450,6 +450,20 @@ feedforge_add_standalone_fuzz_smoke(
   FeedForge::generated::itch50_all
 )
 
+if(TARGET feedforge_compiler_frontend)
+  foreach(_compiler_fuzzer IN ITEMS schema pipeline compile)
+    feedforge_add_standalone_fuzz_smoke(
+      "compiler_${_compiler_fuzzer}"
+      "fuzz_compiler_${_compiler_fuzzer}.cpp"
+      feedforge_compiler_frontend
+    )
+    target_compile_features(
+      "feedforge_test_arbitrary_input_compiler_${_compiler_fuzzer}"
+      PRIVATE cxx_std_23
+    )
+  endforeach()
+endif()
+
 if(NOT MSVC AND CMAKE_CXX_COMPILER_ID MATCHES "^(AppleClang|Clang|GNU)$")
   add_executable(
     feedforge_test_no_exceptions_rtti

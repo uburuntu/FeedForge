@@ -194,15 +194,24 @@ The Clang libFuzzer executables are:
    against the independent 23-message oracle; and
 4. `fuzz_replay`: arbitrary BinaryFILE through canonical one-shot and chunked
    replay, including one-byte and deterministic arbitrary partitions, with a
-   complete `noexcept` no-op sink.
+   complete `noexcept` no-op sink;
+5. `fuzz_compiler_schema`: arbitrary TOML through schema parsing and semantic
+   validation;
+6. `fuzz_compiler_pipeline`: arbitrary TOML through pipeline parsing and
+   semantic validation against a fixed valid schema; and
+7. `fuzz_compiler_compile`: paired schema and pipeline TOML through validation,
+   FFIR lowering, canonical JSON rendering, and C++ emission.
 
 At configure time, `fuzz/generate_corpus.cmake` validates `raw_hex` against
 `raw_size` and derives isolated build-tree seeds from all reviewed fixtures. The
-reviewed TOML remains the source of truth. Committed error seeds cover empty
-payload, unknown type, invalid size, complete and incomplete framing, truncated
-prefix or payload, and trailing data. The generated manifest and aggregate
-replay make the mapping traceable without host-dependent paths or parallel
-build writes.
+reviewed TOML remains the source of truth. Compiler seeds copy valid, reordered,
+and semantically invalid fixtures or use deterministic malformed, UTF-8, and
+parser-transition cases defined by the generator; paired full-compile inputs are
+assembled only in the build tree.
+Committed runtime error seeds cover empty payload, unknown type, invalid size,
+complete and incomplete framing, truncated prefix or payload, and trailing
+data. The generated manifest records runtime fixture mappings and compiler-seed
+provenance without host-dependent paths or parallel build writes.
 
 For identical bytes, the targets assert deterministic outcomes, no sink call
 after an error, at most one sink call per payload, validation before counted
@@ -212,8 +221,10 @@ around those semantic assertions.
 
 CI runs a short fixed-duration smoke over the seeds. Longer fuzz campaigns are
 scheduled or manual, preserve useful reproducers, and record the toolchain,
-target, corpus revision, duration, and failing input. Configure and build the
-fuzzers with:
+target, corpus revision, duration, and failing input. Compiler fuzz inputs are
+bounded by the same source and rendering limits as `feedforgec`; CI additionally
+caps each input at 4096 bytes and each ordinary smoke run at 15 seconds.
+Configure and build the fuzzers with:
 
 ```sh
 cmake --preset fuzz
@@ -221,8 +232,8 @@ cmake --build --preset fuzz
 ```
 
 The fuzz preset fails with an actionable diagnostic when the selected Clang has
-no usable libFuzzer, ASan, and UBSan runtime. Normal test builds also compile the
-same four harnesses with fixed deterministic arbitrary inputs as
+no usable libFuzzer, ASan, and UBSan runtime. Normal compiler-enabled test builds
+also compile the same seven harnesses with fixed deterministic arbitrary inputs as
 `hardening.arbitrary_input.*`; this is the local smoke path for AppleClang
 installations that omit libFuzzer.
 
@@ -274,7 +285,7 @@ The [main CI workflow](../.github/workflows/ci.yml) must cover:
 - a release-blocking s390x big-endian portability probe under QEMU, which is
   emulation evidence rather than a physical-hardware support tier; and
 - the separate [Linux fuzz-smoke workflow](../.github/workflows/fuzz-smoke.yml)
-  for all four libFuzzer targets, including a weekly five-minute campaign.
+  for all seven libFuzzer targets, including a weekly five-minute campaign.
 
 Tier 1 failures block integration. Tier 2 jobs are expected to pass and must not
 be silently marked `continue-on-error`. A temporary Tier 2 exception must be
