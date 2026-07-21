@@ -52,6 +52,7 @@ PIPELINE ?= pipelines/order_events.toml
 GENERATED_OUTPUT ?= $(BUILD_ROOT)/manual/itch50_order_events.hpp
 IR_OUTPUT ?= $(BUILD_ROOT)/manual/itch50_order_events.ffir.json
 REPLAY_FILE ?=
+CONFORMANCE_OUTPUT_DIR ?= $(BUILD_ROOT)/conformance
 FEEDFORGEC = $(BUILD_ROOT)/$(GENERATE_PRESET)/src/feedforgec/feedforgec
 
 LLVM_PREFIX = $(shell \
@@ -167,7 +168,7 @@ endef
 	configure build test check quick dev release sanitizers compiler-off no-exceptions-rtti \
 	verify verify-all \
 	test-allocation test-arbitrary-input test-installed \
-	generated-check generated-refresh compiler validate pipeline-compile pipeline-ir \
+	conformance-bundle generated-check generated-refresh compiler validate pipeline-compile pipeline-ir \
 	demo replay replay-empty \
 	llvm-dev llvm-sanitizers rtsan \
 	fuzz-build fuzz-binary-file fuzz-decode-one fuzz-differential-decode fuzz-replay \
@@ -260,6 +261,7 @@ variables: ## Show the most useful Makefile overrides
 		'LLVM_CXX' '$(LLVM_CXX)' \
 		'SCHEMA' '$(SCHEMA)' \
 		'PIPELINE' '$(PIPELINE)' \
+		'CONFORMANCE_OUTPUT_DIR' '$(CONFORMANCE_OUTPUT_DIR)' \
 		'FUZZ_SECONDS' '$(FUZZ_SECONDS)' \
 		'BENCH_LABEL' '$(BENCH_LABEL)' \
 		'BENCH_SOURCE_ID' '$(BENCH_SOURCE_ID)' \
@@ -356,6 +358,16 @@ demo: ## Build and run the embedded synthetic order-event showcase
 		cat "$$log" >&2; exit 1; \
 	fi; \
 	"$(BUILD_ROOT)/compiler-off/examples/feedforge-demo"
+
+conformance-bundle: ## Generate deterministic synthetic conformance archives
+	$(call guard_build_output,$(CONFORMANCE_OUTPUT_DIR)/.feedforge-output-guard)
+	$(call announce,Generating the synthetic ITCH 5.0 conformance bundle)
+	@$(CMAKE) --preset "$(GENERATE_PRESET)" $(CMAKE_ARGS) \
+		"-DFEEDFORGE_CONFORMANCE_OUTPUT_DIR=$(CONFORMANCE_OUTPUT_DIR)"
+	@$(CMAKE_BUILD) --preset "$(GENERATE_PRESET)" --target conformance-bundle $(PARALLEL)
+	@printf '%s\n%s\n' \
+		"$(CONFORMANCE_OUTPUT_DIR)/feedforge-itch50-conformance-v1.tar.gz" \
+		"$(CONFORMANCE_OUTPUT_DIR)/feedforge-itch50-conformance-v1.zip"
 
 generated-check: ## Compare canonical generated headers byte-for-byte
 	$(call announce,Checking committed generated headers)

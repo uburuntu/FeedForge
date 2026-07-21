@@ -94,6 +94,29 @@ if(TARGET feedforgec)
   )
 endif()
 
+if(TARGET feedforge_conformance_bundle_assets)
+  add_test(
+    NAME conformance.bundle_generator
+    COMMAND
+      "${Python3_EXECUTABLE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/conformance/test_bundle.py"
+      --generator
+      "${PROJECT_SOURCE_DIR}/tools/generate_conformance_bundle.py"
+      --fixtures-dir
+      "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/itch50"
+      --source-lock
+      "${PROJECT_SOURCE_DIR}/schemas/sources.lock.toml"
+      --license
+      "${PROJECT_SOURCE_DIR}/LICENSE"
+  )
+  set_tests_properties(
+    conformance.bundle_generator
+    PROPERTIES
+      LABELS conformance
+      TIMEOUT 30
+  )
+endif()
+
 if(TARGET FeedForge::compiler)
   set(
     _feedforge_source_tree_generated_root
@@ -367,6 +390,10 @@ list(
 
 foreach(_source IN LISTS _feedforge_test_sources)
   file(RELATIVE_PATH _relative_source "${CMAKE_CURRENT_SOURCE_DIR}" "${_source}")
+  if(_relative_source STREQUAL "integration/conformance_bundle.cpp" AND
+     NOT TARGET feedforge_conformance_bundle_assets)
+    continue()
+  endif()
   string(REGEX REPLACE "\\.cpp$" "" _test_name "${_relative_source}")
   string(REPLACE "/" "." _test_name "${_test_name}")
   string(MAKE_C_IDENTIFIER "${_test_name}" _target_suffix)
@@ -375,6 +402,17 @@ foreach(_source IN LISTS _feedforge_test_sources)
   add_executable("${_target}" "${_source}")
   target_compile_features("${_target}" PRIVATE cxx_std_20)
   target_include_directories("${_target}" PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+  if(_relative_source STREQUAL "integration/conformance_bundle.cpp")
+    target_compile_definitions(
+      "${_target}"
+      PRIVATE
+        "FEEDFORGE_CONFORMANCE_BUNDLE_DIR=\"${FEEDFORGE_CONFORMANCE_BUNDLE_ROOT}\""
+    )
+    add_dependencies(
+      "${_target}"
+      feedforge_conformance_bundle_assets
+    )
+  endif()
   if(_relative_source MATCHES "^integration/")
     target_compile_definitions(
       "${_target}"
@@ -395,6 +433,12 @@ foreach(_source IN LISTS _feedforge_test_sources)
   feedforge_configure_project_target("${_target}")
   add_test(NAME "${_test_name}" COMMAND "${_target}")
   set_tests_properties("${_test_name}" PROPERTIES TIMEOUT 30)
+  if(_relative_source STREQUAL "integration/conformance_bundle.cpp")
+    set_tests_properties(
+      "${_test_name}"
+      PROPERTIES LABELS "conformance;integration"
+    )
+  endif()
   if(_relative_source MATCHES "^hardening/")
     set_tests_properties("${_test_name}" PROPERTIES LABELS hardening)
   endif()

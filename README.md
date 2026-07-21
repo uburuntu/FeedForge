@@ -238,6 +238,7 @@ certification, or production-trading guarantees.
 - [Generated C++ API](docs/generated-api.md)
 - [Testing and fixture provenance](docs/testing.md)
 - [Local vcpkg overlay](docs/vcpkg.md)
+- [Synthetic conformance bundle](docs/conformance-bundle.md)
 - [Benchmark contract](docs/benchmarking.md)
 - [Performance case study](docs/performance-case-study.md)
 - [Schema audit](docs/schema-audit.md)

@@ -26,6 +26,72 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(FeedForgeWarnings)
 feedforge_detect_rtsan()
 
+if(PROJECT_IS_TOP_LEVEL)
+  find_package(Python3 3.11 QUIET COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    set(
+      FEEDFORGE_CONFORMANCE_OUTPUT_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/conformance"
+      CACHE PATH
+      "Output directory for generated synthetic conformance bundles"
+    )
+    set(
+      FEEDFORGE_CONFORMANCE_BUNDLE_ROOT
+      "${FEEDFORGE_CONFORMANCE_OUTPUT_DIR}/feedforge-itch50-conformance-v1"
+    )
+    set(
+      _feedforge_conformance_tar
+      "${FEEDFORGE_CONFORMANCE_OUTPUT_DIR}/feedforge-itch50-conformance-v1.tar.gz"
+    )
+    set(
+      _feedforge_conformance_zip
+      "${FEEDFORGE_CONFORMANCE_OUTPUT_DIR}/feedforge-itch50-conformance-v1.zip"
+    )
+    file(
+      GLOB _feedforge_conformance_fixtures
+      CONFIGURE_DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/itch50/*.toml"
+    )
+    add_custom_command(
+      OUTPUT
+        "${FEEDFORGE_CONFORMANCE_BUNDLE_ROOT}/manifest.json"
+        "${_feedforge_conformance_tar}"
+        "${_feedforge_conformance_zip}"
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_conformance_bundle.py"
+        --fixtures-dir "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/itch50"
+        --source-lock "${CMAKE_CURRENT_SOURCE_DIR}/schemas/sources.lock.toml"
+        --license "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
+        --output-dir "${FEEDFORGE_CONFORMANCE_OUTPUT_DIR}"
+      DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_conformance_bundle.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/schemas/sources.lock.toml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
+        ${_feedforge_conformance_fixtures}
+      COMMENT "Generating deterministic synthetic ITCH 5.0 conformance archives"
+      VERBATIM
+    )
+    add_custom_target(
+      feedforge_conformance_bundle_assets
+      DEPENDS
+        "${FEEDFORGE_CONFORMANCE_BUNDLE_ROOT}/manifest.json"
+        "${_feedforge_conformance_tar}"
+        "${_feedforge_conformance_zip}"
+    )
+    add_custom_target(conformance-bundle)
+    add_dependencies(
+      conformance-bundle
+      feedforge_conformance_bundle_assets
+    )
+  else()
+    message(
+      STATUS
+      "Python 3.11 or newer was not found; conformance-bundle is unavailable"
+    )
+  endif()
+endif()
+
 function(feedforge_check_runtime_features)
   set(CMAKE_CXX_STANDARD 20)
   set(CMAKE_CXX_STANDARD_REQUIRED YES)

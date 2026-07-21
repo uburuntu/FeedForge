@@ -62,6 +62,7 @@ byte.
 | All portable local gates | `make verify` |
 | Extended LLVM/fuzz local matrix | `make verify-all` |
 | Canonical generated-byte check | `make generated-check` |
+| Synthetic conformance archives | `make conformance-bundle` |
 | Upstream LLVM full suite | `make llvm-dev` |
 | RealtimeSanitizer smoke | `make rtsan` |
 | Seven bounded libFuzzer runs | `make fuzz-smoke` |

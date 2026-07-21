@@ -141,6 +141,13 @@ uses `find_package`, generates a pipeline with the installed compiler, builds
 the consumer as C++20, and runs it. Runtime-only minimum-compiler jobs disable
 the host compiler and consume committed canonical headers instead.
 
+The [synthetic conformance bundle](conformance-bundle.md) repackages the same
+reviewed fixtures into ignored portable assets. Its generator test checks
+byte-for-byte archive reproducibility, normalized expectations, hashes, archive
+metadata, and extraction. Its C++ integration test consumes the generated
+payload and BinaryFILE files through both the independent oracle and generated
+decoder. No generated bundle or archive is committed.
+
 ## Allocation, exceptions, and realtime checks
 
 `hardening.allocation` finishes input and sink setup, resets replacements for
