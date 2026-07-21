@@ -9,12 +9,17 @@ exchange-certified, and is not production trading infrastructure.
 - Compiler output now uses exclusively created same-directory temporary files,
   explicit flush and close checks, atomic destination replacement, and RAII
   cleanup on POSIX and Windows.
-- Three compiler fuzz targets exercise schema parsing and validation, pipeline
-  parsing and resolution, and full lowering plus deterministic FFIR/C++
-  emission using reviewed seed corpora.
-- A malformed table-header preflight prevents a reachable toml++ parser
-  assertion while preserving valid quoted, dotted, comment, and multiline
-  string forms.
+- Seven libFuzzer targets cover the four runtime decode/replay surfaces plus
+  schema parsing and validation, pipeline parsing and resolution, and full
+  lowering with deterministic FFIR/C++ emission.
+- Parser preflight rejects malformed UTF-8 and non-ASCII bare or table-header
+  keys before toml++ while preserving Unicode strings, comments, and quoted
+  keys; diagnostic columns count code points and exclude an optional UTF-8 BOM.
+- Array/container preflight rejects an unmatched `}` inside an array before
+  parser value handling.
+- Complete four- and five-quote multiline basic and literal string closers are
+  consumed as a unit, so transitions into following malformed arrays remain
+  visible instead of leaving a phantom string state.
 - Native MSVC 19.38 or newer now builds `feedforgec`, runs the full compiler and
   runtime suite, and reproduces canonical generated headers byte for byte.
   ClangCL remains an independent Windows compiler portability gate.
