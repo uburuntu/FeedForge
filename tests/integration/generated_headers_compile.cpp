@@ -33,8 +33,8 @@ static_assert(all_messages::pipeline_metadata::required_runtime_api_epoch == std
 static_assert(order_events::pipeline_metadata::required_runtime_api_epoch == std::uint32_t{1U});
 static_assert(all_messages::pipeline_metadata::minimum_runtime_api_revision == std::uint32_t{0U});
 static_assert(order_events::pipeline_metadata::minimum_runtime_api_revision == std::uint32_t{0U});
-static_assert(all_messages::pipeline_metadata::generator_version == std::string_view{"0.3.0"});
-static_assert(order_events::pipeline_metadata::generator_version == std::string_view{"0.3.0"});
+static_assert(all_messages::pipeline_metadata::generator_version == std::string_view{"0.4.0"});
+static_assert(order_events::pipeline_metadata::generator_version == std::string_view{"0.4.0"});
 
 template <class Event> void print_layout() noexcept {
   std::printf("%zu:%zu;", sizeof(Event), alignof(Event));

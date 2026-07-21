@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.25)
 
 project(
   FeedForge
-  VERSION 0.3.0
+  VERSION 0.4.0
   DESCRIPTION "Ahead-of-time compiler for checked market-data decode pipelines"
   HOMEPAGE_URL "https://github.com/uburuntu/FeedForge"
   LANGUAGES CXX
