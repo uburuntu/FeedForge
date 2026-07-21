@@ -750,7 +750,8 @@ def build_tree(root: Path, fixtures: list[dict[str, Any]], source_metadata: dict
     write_file(root, "PROVENANCE.json", json_bytes(provenance))
 
     manifest_files = []
-    for path in sorted(path for path in root.rglob("*") if path.is_file()):
+    files = (path for path in root.rglob("*") if path.is_file())
+    for path in sorted(files, key=lambda item: item.relative_to(root).as_posix()):
         data = path.read_bytes()
         manifest_files.append({
             "bytes": len(data),
@@ -767,7 +768,7 @@ def build_tree(root: Path, fixtures: list[dict[str, Any]], source_metadata: dict
 
 def archive_entries(root: Path) -> list[tuple[str, Path | None]]:
     entries: list[tuple[str, Path | None]] = [(f"{BUNDLE_NAME}/", None)]
-    for path in sorted(root.rglob("*")):
+    for path in sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix()):
         relative = path.relative_to(root).as_posix()
         archive_name = f"{BUNDLE_NAME}/{relative}"
         entries.append((archive_name + "/" if path.is_dir() else archive_name,
