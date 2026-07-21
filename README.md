@@ -13,7 +13,7 @@ pipelines. Its scope is deliberately narrow: compile a declarative
 Nasdaq TotalView-ITCH 5.0 projection into strict C++20, then replay Nasdaq
 BinaryFILE data through a statically bound sink.
 
-FeedForge v0.2.0 is an **offline checked decoder**, not a feed handler or trading
+FeedForge v0.3.0 is an **offline checked decoder**, not a feed handler or trading
 platform. It is experimental, is not exchange-certified, and is not production
 trading infrastructure.
 
@@ -87,11 +87,13 @@ environment limits, content IDs, and the redacted holdout conclusion.
 
 ## Scope
 
-FeedForge v0.2 provides:
+FeedForge v0.3 provides:
 
 - a header-only C++20 runtime exposed as `FeedForge::runtime`;
 - a C++23 host compiler exposed as `FeedForge::compiler`;
 - deterministic generation of self-contained pipeline headers;
+- explicit runtime API epoch/revision compatibility and 64-bit replay offsets;
+- bounded schema and pipeline compilation with stable diagnostics;
 - portable, bounds-checked one-shot and caller-buffered chunked BinaryFILE
   decoding;
 - an independently transcribed differential decode oracle and four libFuzzer
@@ -218,13 +220,17 @@ runtime-only install configured with `FEEDFORGE_BUILD_COMPILER=OFF`; this path
 requires neither C++23 nor toml++. Custom generation requires an install that
 contains `FeedForge::compiler`.
 
-FeedForge v0.2 processes caller-provided Nasdaq BinaryFILE byte spans only. It does not
+FeedForge v0.3 processes caller-provided Nasdaq BinaryFILE byte spans only. It does not
 provide live networking, recovery, order-book reconstruction, exchange
 certification, or production-trading guarantees.
 
 ## Documentation
 
 - [Architecture](docs/architecture.md)
+- [Compatibility](docs/compatibility.md)
+- [Compiler CLI](docs/compiler-cli.md)
+- [Compiler limits](docs/compiler-limits.md)
+- [Security model](docs/security-model.md)
 - [Development workflow](docs/development.md)
 - [Adoption and integration guide](docs/adoption.md)
 - [Schema format](docs/schema-format.md)
@@ -234,7 +240,7 @@ certification, or production-trading guarantees.
 - [Benchmark contract](docs/benchmarking.md)
 - [Performance case study](docs/performance-case-study.md)
 - [Schema audit](docs/schema-audit.md)
-- [v0.2.0 release notes](RELEASE_NOTES.md)
+- [v0.3.0 release notes](RELEASE_NOTES.md)
 
 ## Contributing and security
 

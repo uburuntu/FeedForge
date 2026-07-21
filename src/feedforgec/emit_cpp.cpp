@@ -12,12 +12,14 @@
 #include <string_view>
 #include <utility>
 
+#include "compiler_limits.hpp"
 #include "sha256.hpp"
 
 namespace feedforge::compiler {
 namespace {
 
-inline constexpr std::uint32_t required_runtime_api_version = 2U;
+inline constexpr std::uint32_t required_runtime_api_epoch = 1U;
+inline constexpr std::uint32_t minimum_runtime_api_revision = 0U;
 
 [[nodiscard]] diagnostic emitter_problem(
     std::string object_path, std::string message,
@@ -645,8 +647,11 @@ void append_metadata(std::string& output, const ffir_v1& ir) {
   append_line(output, 1U, "};");
   append_line(output, 0U);
   append_line(output, 1U,
-              "static constexpr std::uint32_t required_runtime_api_version{" +
-                  std::to_string(required_runtime_api_version) + "U};");
+              "static constexpr std::uint32_t required_runtime_api_epoch{" +
+                  std::to_string(required_runtime_api_epoch) + "U};");
+  append_line(output, 1U,
+              "static constexpr std::uint32_t minimum_runtime_api_revision{" +
+                  std::to_string(minimum_runtime_api_revision) + "U};");
   append_line(output, 1U,
               "static constexpr std::uint32_t ffir_format_version{" +
                   std::to_string(ir.format_version) + "U};");
@@ -679,15 +684,16 @@ void append_metadata(std::string& output, const ffir_v1& ir) {
   append_line(output, 0U, "};");
   append_line(output, 0U);
 
-  append_line(
-      output, 0U,
-      "static_assert(feedforge::runtime_api_version ==");
+  append_line(output, 0U, "static_assert(feedforge::runtime_api_epoch ==");
+  append_line(output, 2U, "pipeline_metadata::required_runtime_api_epoch,");
   append_line(output, 2U,
-              "pipeline_metadata::required_runtime_api_version,");
-  append_line(
-      output, 2U,
-      "\"FeedForge runtime API mismatch; regenerate this header with a "
-      "compatible compiler\");");
+              "\"FeedForge runtime API epoch mismatch; regenerate this header with a "
+              "compatible compiler\");");
+  append_line(output, 0U, "static_assert(feedforge::runtime_api_revision >=");
+  append_line(output, 2U, "pipeline_metadata::minimum_runtime_api_revision,");
+  append_line(output, 2U,
+              "\"FeedForge runtime API revision is too old; install a compatible "
+              "runtime\");");
   append_line(output, 0U,
               "static_assert(feedforge::decoder_implementation<");
   append_line(output, 2U,
@@ -1190,7 +1196,7 @@ void append_replay(std::string& output, const ffir_v1& ir) {
               "summary.bytes_consumed = cursor.consumed();");
   append_line(output, 4U,
               "summary.error_offset = "
-              "static_cast<std::size_t>(frame.offset);");
+              "frame.offset;");
   append_line(output, 4U, "summary.framing_error = frame.error;");
   append_line(output, 4U, "return summary;");
   append_line(output, 2U, "}");
@@ -1313,7 +1319,7 @@ void append_chunked_replay(std::string& output) {
   append_line(output, 3U, "summary_.status = feedforge::replay_status::decode_error;");
   append_line(output, 3U,
               "summary_.error_offset = "
-              "static_cast<std::size_t>(frame.file_offset) + 2U;");
+              "frame.file_offset + 2U;");
   append_line(output, 3U, "summary_.decode_error = outcome;");
   append_line(output, 2U, "}");
   append_line(output, 2U, "terminal_ = true;");
@@ -1325,7 +1331,7 @@ void append_chunked_replay(std::string& output) {
   append_line(output, 2U, "summary_.status = feedforge::replay_status::framing_error;");
   append_line(output, 2U,
               "summary_.error_offset = "
-              "static_cast<std::size_t>(frame.offset);");
+              "frame.offset;");
   append_line(output, 2U, "summary_.framing_error = frame.error;");
   append_line(output, 2U, "terminal_ = true;");
   append_line(output, 1U, "}");
@@ -1362,6 +1368,11 @@ result<std::string> emit_cpp(const ffir_v1& ir) {
   append_replay(output, ir);
   append_chunked_replay(output);
   append_footer(output, ir);
+  if (output.size() > limits::rendered_bytes) {
+    return std::unexpected(
+        make_diagnostic("FFLIMIT001", {}, source_mark{}, "output",
+                        "generated C++ exceeds the 16777216-byte rendered output limit"));
+  }
   return output;
 }
 

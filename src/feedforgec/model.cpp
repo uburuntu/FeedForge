@@ -10,6 +10,8 @@
 #include <string>
 #include <utility>
 
+#include "compiler_limits.hpp"
+
 namespace feedforge::compiler {
 namespace {
 
@@ -331,7 +333,7 @@ bool is_cpp_keyword(const std::string_view name) noexcept {
 }
 
 bool is_valid_source_name(const std::string_view name) noexcept {
-  if (name.empty() || !is_ascii_lower(name.front()) ||
+  if (name.empty() || name.size() > limits::identifier_bytes || !is_ascii_lower(name.front()) ||
       name.find("__") != std::string_view::npos || is_cpp_keyword(name)) {
     return false;
   }
@@ -361,6 +363,10 @@ result<resolved_schema> validate_schema(const schema_source& source) {
         source, source.mark, "FFSCHEMA001", "schema.format_version",
         "schema format_version must be exactly 1"));
   }
+  if (source.name.size() > limits::identifier_bytes) {
+    return std::unexpected(schema_problem(source, source.mark, "FFLIMIT001", "schema.name",
+                                          "schema name exceeds the 128-byte identifier limit"));
+  }
   if (!is_valid_source_name(source.name)) {
     return std::unexpected(schema_problem(
         source, source.mark, "FFSCHEMA005", "schema.name",
@@ -381,6 +387,38 @@ result<resolved_schema> validate_schema(const schema_source& source) {
         source, source.mark, "FFSCHEMA030", "schema.messages",
         "a schema must define at least one message"));
   }
+  if (source.protocol_version.size() > limits::documentation_bytes) {
+    return std::unexpected(
+        schema_problem(source, source.mark, "FFLIMIT001", "schema.protocol_version",
+                       "protocol_version exceeds the 4096-byte provenance limit"));
+  }
+  if (source.document_revision.size() > limits::documentation_bytes) {
+    return std::unexpected(
+        schema_problem(source, source.mark, "FFLIMIT001", "schema.document_revision",
+                       "document_revision exceeds the 4096-byte provenance limit"));
+  }
+  if (source.types.size() > limits::user_types) {
+    return std::unexpected(schema_problem(source, source.mark, "FFLIMIT001", "schema.types",
+                                          "schema.types exceeds the 256-type limit"));
+  }
+  if (source.messages.size() > limits::messages) {
+    return std::unexpected(schema_problem(source, source.mark, "FFLIMIT001", "schema.messages",
+                                          "schema.messages exceeds the 94-message limit"));
+  }
+  std::size_t total_fields = 0U;
+  for (std::size_t index = 0U; index < source.messages.size(); ++index) {
+    const message_source& message = source.messages[index];
+    if (message.fields.size() > limits::fields_per_message) {
+      return std::unexpected(schema_problem(source, message.mark, "FFLIMIT001",
+                                            message_object(index, message.name) + ".fields",
+                                            "message fields exceed the 1024-field limit"));
+    }
+    if (message.fields.size() > limits::total_schema_fields - total_fields) {
+      return std::unexpected(schema_problem(source, message.mark, "FFLIMIT001", "schema.messages",
+                                            "schema exceeds the 8192-field total limit"));
+    }
+    total_fields += message.fields.size();
+  }
 
   resolved_schema resolved{
       .format_version = 1U,
@@ -398,6 +436,10 @@ result<resolved_schema> validate_schema(const schema_source& source) {
   for (std::size_t index = 0; index < source.types.size(); ++index) {
     const type_source& type = source.types[index];
     const std::string object_path = type_object(index, type.name);
+    if (type.name.size() > limits::identifier_bytes) {
+      return std::unexpected(schema_problem(source, type.mark, "FFLIMIT001", object_path + ".name",
+                                            "type name exceeds the 128-byte identifier limit"));
+    }
     if (!is_valid_source_name(type.name)) {
       return std::unexpected(schema_problem(
           source, type.mark, "FFSCHEMA005", object_path + ".name",
@@ -491,6 +533,11 @@ result<resolved_schema> validate_schema(const schema_source& source) {
     const message_source& message = source.messages[message_index];
     const std::string message_path =
         message_object(message_index, message.name);
+    if (message.name.size() > limits::identifier_bytes) {
+      return std::unexpected(schema_problem(source, message.mark, "FFLIMIT001",
+                                            message_path + ".name",
+                                            "message name exceeds the 128-byte identifier limit"));
+    }
     if (!is_valid_source_name(message.name)) {
       return std::unexpected(schema_problem(
           source, message.mark, "FFSCHEMA005", message_path + ".name",
@@ -541,6 +588,30 @@ result<resolved_schema> validate_schema(const schema_source& source) {
       const field_source& field = message.fields[field_index];
       const std::string object_path =
           field_object(message_path, field_index, field.name);
+      if (field.name.size() > limits::identifier_bytes) {
+        return std::unexpected(schema_problem(source, field.mark, "FFLIMIT001",
+                                              object_path + ".name",
+                                              "field name exceeds the 128-byte identifier limit"));
+      }
+      if (field.type.size() > limits::identifier_bytes) {
+        return std::unexpected(schema_problem(source, field.mark, "FFLIMIT001",
+                                              object_path + ".type",
+                                              "field type exceeds the 128-byte identifier limit"));
+      }
+      if (field.allowed.size() > limits::allowed_values_per_field) {
+        return std::unexpected(schema_problem(source, field.mark, "FFLIMIT001",
+                                              object_path + ".allowed",
+                                              "allowed exceeds the 256-value per-field limit"));
+      }
+      std::size_t allowed_bytes = 0U;
+      for (const std::string& allowed : field.allowed) {
+        if (allowed.size() > limits::allowed_value_bytes_per_field - allowed_bytes) {
+          return std::unexpected(
+              schema_problem(source, field.mark, "FFLIMIT001", object_path + ".allowed",
+                             "allowed values exceed the 65535-byte per-field limit"));
+        }
+        allowed_bytes += allowed.size();
+      }
       if (!is_valid_source_name(field.name)) {
         return std::unexpected(schema_problem(
             source, field.mark, "FFSCHEMA005", object_path + ".name",
@@ -722,6 +793,39 @@ result<resolved_pipeline> validate_pipeline(const pipeline_source& source,
         source, source.mark, "FFPIPE001", "pipeline.format_version",
         "pipeline format_version must be exactly 1"));
   }
+  if (source.name.size() > limits::identifier_bytes) {
+    return std::unexpected(pipeline_problem(source, source.mark, "FFLIMIT001", "pipeline.name",
+                                            "pipeline name exceeds the 128-byte identifier limit"));
+  }
+  if (source.schema.size() > limits::identifier_bytes) {
+    return std::unexpected(
+        pipeline_problem(source, source.mark, "FFLIMIT001", "pipeline.schema",
+                         "schema reference exceeds the 128-byte identifier limit"));
+  }
+  if (source.cpp_namespace.size() > limits::namespace_bytes) {
+    return std::unexpected(pipeline_problem(source, source.mark, "FFLIMIT001", "pipeline.namespace",
+                                            "namespace exceeds the 512-byte limit"));
+  }
+  if (source.projections.size() > limits::projections) {
+    return std::unexpected(pipeline_problem(source, source.mark, "FFLIMIT001", "pipeline.emit",
+                                            "pipeline.emit exceeds the 94-projection limit"));
+  }
+  std::size_t total_projected_fields = 0U;
+  for (std::size_t index = 0U; index < source.projections.size(); ++index) {
+    const projection_source& projection = source.projections[index];
+    if (projection.fields.size() > limits::fields_per_projection) {
+      return std::unexpected(
+          pipeline_problem(source, projection.mark, "FFLIMIT001",
+                           projection_object(index, projection.event) + ".fields",
+                           "projection fields exceed the 1024-field limit"));
+    }
+    if (projection.fields.size() > limits::total_projected_fields - total_projected_fields) {
+      return std::unexpected(
+          pipeline_problem(source, projection.mark, "FFLIMIT001", "pipeline.emit",
+                           "pipeline exceeds the 8192-projected-field total limit"));
+    }
+    total_projected_fields += projection.fields.size();
+  }
   if (!is_valid_source_name(source.name)) {
     return std::unexpected(pipeline_problem(
         source, source.mark, "FFPIPE005", "pipeline.name",
@@ -760,7 +864,14 @@ result<resolved_pipeline> validate_pipeline(const pipeline_source& source,
         "namespace must contain at least one component"));
   }
   std::size_t component_start = 0U;
+  std::size_t component_count = 0U;
   while (component_start <= source.cpp_namespace.size()) {
+    ++component_count;
+    if (component_count > limits::namespace_components) {
+      return std::unexpected(pipeline_problem(source, source.mark, "FFLIMIT001",
+                                              "pipeline.namespace",
+                                              "namespace exceeds the 16-component limit"));
+    }
     const std::size_t separator =
         source.cpp_namespace.find("::", component_start);
     const std::size_t component_end =
@@ -769,6 +880,11 @@ result<resolved_pipeline> validate_pipeline(const pipeline_source& source,
     const std::string_view component{source.cpp_namespace.data() +
                                          component_start,
                                      component_end - component_start};
+    if (component.size() > limits::identifier_bytes) {
+      return std::unexpected(
+          pipeline_problem(source, source.mark, "FFLIMIT001", "pipeline.namespace",
+                           "namespace component exceeds the 128-byte identifier limit"));
+    }
     if (!is_valid_namespace_component(component)) {
       return std::unexpected(pipeline_problem(
           source, source.mark, "FFPIPE006", "pipeline.namespace",
@@ -807,6 +923,11 @@ result<resolved_pipeline> validate_pipeline(const pipeline_source& source,
   for (std::size_t index = 0; index < source.projections.size(); ++index) {
     const projection_source& projection = source.projections[index];
     const std::string object_path = projection_object(index, projection.event);
+    if (projection.event.size() > limits::identifier_bytes) {
+      return std::unexpected(pipeline_problem(source, projection.mark, "FFLIMIT001",
+                                              object_path + ".event",
+                                              "event name exceeds the 128-byte identifier limit"));
+    }
     if (projection.source.size() != 1U) {
       return std::unexpected(pipeline_problem(
           source, projection.mark, "FFPIPE011", object_path + ".source",
@@ -878,6 +999,12 @@ result<resolved_pipeline> validate_pipeline(const pipeline_source& source,
             field_index < projection.field_marks.size()
                 ? projection.field_marks[field_index]
                 : projection.mark;
+        if (field_name.size() > limits::identifier_bytes) {
+          return std::unexpected(
+              pipeline_problem(source, field_mark, "FFLIMIT001",
+                               object_path + ".fields[" + std::to_string(field_index) + "]",
+                               "projected field name exceeds the 128-byte identifier limit"));
+        }
         if (!projected_names.insert(field_name).second) {
           return std::unexpected(pipeline_problem(
               source, field_mark, "FFPIPE017", object_path + ".fields",

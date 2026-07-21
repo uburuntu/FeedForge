@@ -19,8 +19,9 @@ pipeline's configured namespace. Canonical artifacts are:
   `feedforge::generated::nasdaq::itch50_order_events`.
 
 Generated headers depend on the public FeedForge runtime headers and C++20
-standard library only. Each header records the required runtime source-API
-version and statically compares it with `feedforge::runtime_api_version`.
+standard library only. Each header records a required runtime API epoch and
+minimum revision. It statically requires the installed runtime's epoch to
+match and its revision to be new enough. See [Compatibility](compatibility.md).
 
 ## Event types
 
@@ -197,8 +198,8 @@ struct replay_summary {
   std::uint64_t events_emitted{};
   std::uint64_t known_messages_skipped{};
   std::uint64_t unknown_messages_skipped{};
-  std::size_t bytes_consumed{};
-  std::size_t error_offset{};
+  std::uint64_t bytes_consumed{};
+  std::uint64_t error_offset{};
   feedforge::framing_errc framing_error{};
   feedforge::decode_outcome decode_error{};
 };
@@ -228,8 +229,8 @@ complete/incomplete when stop or error occurred first.
 
 ## Chunked BinaryFILE replay
 
-Each generated namespace also exposes an additive v0.2 adapter for inputs that
-arrive in arbitrary chunks:
+Each generated namespace also exposes an adapter for inputs that arrive in
+arbitrary chunks:
 
 ```cpp
 template <class Sink>
@@ -290,6 +291,8 @@ one-shot function and `binary_file_cursor` APIs are unchanged.
   `framing_error`.
 - A decode `error_offset` identifies the frame payload's first byte. A framing
   offset identifies the offending length prefix or first trailing byte.
+- Absolute offset exhaustion terminates chunked framing with
+  `framing_errc::offset_overflow`.
 
 `framing_error` is meaningful only for `framing_error`; `decode_error` is
 meaningful only for `decode_error`; otherwise error-specific members remain

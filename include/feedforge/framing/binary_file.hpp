@@ -3,6 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <span>
 
 #include <feedforge/config.hpp>
@@ -22,6 +23,7 @@ enum class framing_errc : std::uint8_t {
   truncated_payload,
   trailing_data_after_end_marker,
   insufficient_scratch,
+  offset_overflow,
 };
 
 struct frame_view {
@@ -163,6 +165,10 @@ public:
         frame_offset_ = received_;
       }
       while (prefix_size_ != prefix_.size() && input_position != input.size()) {
+        if (received_ == std::numeric_limits<std::uint64_t>::max()) {
+          return make_terminal(chunk_frame_status::error, framing_errc::offset_overflow,
+                               input_position, received_);
+        }
         prefix_[prefix_size_] = input[input_position];
         ++prefix_size_;
         ++input_position;
@@ -202,6 +208,11 @@ public:
     const std::size_t input_remaining = input.size() - input_position;
     const std::size_t copy_size =
         payload_remaining < input_remaining ? payload_remaining : input_remaining;
+    if (static_cast<std::uint64_t>(copy_size) >
+        std::numeric_limits<std::uint64_t>::max() - received_) {
+      return make_terminal(chunk_frame_status::error, framing_errc::offset_overflow, input_position,
+                           received_);
+    }
     for (std::size_t index = 0U; index < copy_size; ++index) {
       scratch_[payload_received_ + index] = input[input_position + index];
     }
@@ -217,9 +228,9 @@ public:
     const auto outcome = chunk_frame_outcome{
         chunk_frame_status::frame,
         framing_errc::none,
-        frame_view{scratch_.first(payload_size_), to_offset(frame_offset_), ordinal_},
+        frame_view{scratch_.first(payload_size_), frame_offset_, ordinal_},
         input_position,
-        to_offset(frame_offset_),
+        frame_offset_,
     };
     committed_ = received_;
     prefix_size_ = 0U;
@@ -247,26 +258,22 @@ public:
                          frame_offset_);
   }
 
-  [[nodiscard]] constexpr std::size_t consumed() const noexcept { return committed_; }
+  [[nodiscard]] constexpr std::uint64_t consumed() const noexcept { return committed_; }
 
-  [[nodiscard]] constexpr std::size_t received() const noexcept { return received_; }
+  [[nodiscard]] constexpr std::uint64_t received() const noexcept { return received_; }
 
 private:
-  [[nodiscard]] static constexpr std::uint64_t to_offset(std::size_t value) noexcept {
-    return static_cast<std::uint64_t>(value);
-  }
-
   [[nodiscard]] constexpr chunk_frame_outcome make_outcome(chunk_frame_status status,
                                                            framing_errc error,
                                                            std::size_t input_consumed,
-                                                           std::size_t offset) const noexcept {
-    return chunk_frame_outcome{status, error, frame_view{}, input_consumed, to_offset(offset)};
+                                                           std::uint64_t offset) const noexcept {
+    return chunk_frame_outcome{status, error, frame_view{}, input_consumed, offset};
   }
 
   [[nodiscard]] constexpr chunk_frame_outcome make_terminal(chunk_frame_status status,
                                                             framing_errc error,
                                                             std::size_t input_consumed,
-                                                            std::size_t offset) noexcept {
+                                                            std::uint64_t offset) noexcept {
     terminal_outcome_ = make_outcome(status, error, input_consumed, offset);
     terminal_ = true;
     return terminal_outcome_;
@@ -277,9 +284,9 @@ private:
   std::size_t prefix_size_{};
   std::uint16_t payload_size_{};
   std::size_t payload_received_{};
-  std::size_t frame_offset_{};
-  std::size_t received_{};
-  std::size_t committed_{};
+  std::uint64_t frame_offset_{};
+  std::uint64_t received_{};
+  std::uint64_t committed_{};
   std::uint64_t ordinal_{};
   chunk_frame_outcome terminal_outcome_{};
   bool saw_end_marker_{};

@@ -47,6 +47,8 @@ namespace order_events =
       return "trailing_data_after_end_marker";
     case insufficient_scratch:
       return "insufficient_scratch";
+    case offset_overflow:
+      return "offset_overflow";
     }
   return "unknown";
 }

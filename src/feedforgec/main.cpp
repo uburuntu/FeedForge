@@ -1,4 +1,5 @@
 #include <cstddef>
+#include <exception>
 #include <expected>
 #include <filesystem>
 #include <fstream>
@@ -9,6 +10,7 @@
 #include <system_error>
 #include <utility>
 
+#include "compiler_limits.hpp"
 #include "diagnostics.hpp"
 #include "emit_cpp.hpp"
 #include "feedforge/version.hpp"
@@ -25,6 +27,7 @@ namespace compiler = feedforge::compiler;
 enum class command {
   validate,
   compile,
+  dump_ir,
 };
 
 struct options {
@@ -32,7 +35,6 @@ struct options {
   std::string schema;
   std::string pipeline;
   std::string output;
-  std::string ir_output;
 };
 
 [[nodiscard]] compiler::diagnostic usage_error(std::string message) {
@@ -45,7 +47,9 @@ void print_help(std::ostream& output) {
          << "Usage:\n"
          << "  feedforgec validate --schema <file> [--pipeline <file>]\n"
          << "  feedforgec compile --schema <file> --pipeline <file> "
-            "--output <file> [--dump-ir <file>]\n"
+            "--output <file>\n"
+         << "  feedforgec dump-ir --schema <file> --pipeline <file> "
+            "--output <file>\n"
          << "  feedforgec --version\n"
          << "  feedforgec --help\n";
 }
@@ -62,6 +66,8 @@ void print_help(std::ostream& output) {
     parsed.action = command::validate;
   } else if (action == "compile") {
     parsed.action = command::compile;
+  } else if (action == "dump-ir") {
+    parsed.action = command::dump_ir;
   } else {
     return std::unexpected(
         usage_error("unknown command '" + std::string(action) + "'"));
@@ -96,8 +102,6 @@ void print_help(std::ostream& output) {
       parsed_option = read_path(index, flag, parsed.pipeline);
     } else if (flag == "--output") {
       parsed_option = read_path(index, flag, parsed.output);
-    } else if (flag == "--dump-ir") {
-      parsed_option = read_path(index, flag, parsed.ir_output);
     } else {
       return std::unexpected(
           usage_error("unknown option '" + std::string(flag) + "'"));
@@ -111,13 +115,11 @@ void print_help(std::ostream& output) {
     return std::unexpected(usage_error("--schema is required"));
   }
   if (parsed.action == command::validate) {
-    if (!parsed.output.empty() || !parsed.ir_output.empty()) {
-      return std::unexpected(
-          usage_error("validate does not accept --output or --dump-ir"));
+    if (!parsed.output.empty()) {
+      return std::unexpected(usage_error("validate does not accept --output"));
     }
   } else if (parsed.pipeline.empty() || parsed.output.empty()) {
-    return std::unexpected(
-        usage_error("compile requires --pipeline and --output"));
+    return std::unexpected(usage_error(std::string(action) + " requires --pipeline and --output"));
   }
   return parsed;
 }
@@ -272,14 +274,6 @@ int run(const options& parsed) {
     return 0;
   }
 
-  const std::string rendered_ir = compiler::canonical_json(ir);
-  auto rendered_cpp = compiler::emit_cpp(ir);
-  if (!rendered_cpp) {
-    compiler::diagnostic problem = std::move(rendered_cpp.error());
-    problem.path = compiler::normalise_source_path(parsed.output);
-    return report(problem, 2);
-  }
-
   if (same_filesystem_location(parsed.output, parsed.schema) ||
       same_filesystem_location(parsed.output, parsed.pipeline)) {
     return report(compiler::make_diagnostic(
@@ -288,46 +282,38 @@ int run(const options& parsed) {
                       "--output must not name the schema or pipeline path"),
                   2);
   }
-  if (!parsed.ir_output.empty()) {
-    if (same_filesystem_location(parsed.ir_output, parsed.output) ||
-        same_filesystem_location(parsed.ir_output, parsed.schema) ||
-        same_filesystem_location(parsed.ir_output, parsed.pipeline)) {
-      return report(compiler::make_diagnostic(
-                        "FFCLI002", parsed.ir_output, compiler::source_mark{},
-                        "dump_ir",
-                        "--dump-ir must not name the schema, pipeline, or "
-                        "--output path"),
-                    2);
-    }
-  }
 
   if (auto parent = validate_output_parent(parsed.output, "output"); !parent) {
     return report(parent.error(), 3);
   }
-  if (!parsed.ir_output.empty()) {
-    if (auto parent = validate_output_parent(parsed.ir_output, "dump_ir");
-        !parent) {
-      return report(parent.error(), 3);
-    }
-  }
 
-  if (auto written = write_atomically(parsed.output, *rendered_cpp, "output");
-      !written) {
-    return report(written.error(), 3);
-  }
-  if (!parsed.ir_output.empty()) {
-    if (auto written =
-            write_atomically(parsed.ir_output, rendered_ir, "dump_ir");
-        !written) {
-      return report(written.error(), 3);
+  std::string rendered;
+  if (parsed.action == command::compile) {
+    auto rendered_cpp = compiler::emit_cpp(ir);
+    if (!rendered_cpp) {
+      compiler::diagnostic problem = std::move(rendered_cpp.error());
+      problem.path = compiler::normalise_source_path(parsed.output);
+      return report(problem, 2);
     }
+    rendered = std::move(*rendered_cpp);
+  } else {
+    rendered = compiler::canonical_json(ir);
+    if (rendered.size() > compiler::limits::rendered_bytes) {
+      return report(
+          compiler::make_diagnostic("FFLIMIT001", parsed.output, compiler::source_mark{}, "output",
+                                    "FFIR JSON exceeds the 16777216-byte rendered output limit"),
+          2);
+    }
+  }
+  if (auto written = write_atomically(parsed.output, rendered, "output"); !written) {
+    return report(written.error(), 3);
   }
   return 0;
 }
 
 }  // namespace
 
-int main(const int argc, char** argv) {
+int main_impl(const int argc, char** argv) {
   if (argc == 2 && std::string_view{argv[1]} == "--help") {
     print_help(std::cout);
     return 0;
@@ -343,4 +329,18 @@ int main(const int argc, char** argv) {
     return report(parsed.error(), 2);
   }
   return run(*parsed);
+}
+
+int main(const int argc, char** argv) {
+  try {
+    return main_impl(argc, argv);
+  } catch (const std::exception&) {
+    return report(compiler::make_diagnostic("FFINTERNAL001", {}, compiler::source_mark{},
+                                            "compiler", "unexpected internal compiler failure"),
+                  4);
+  } catch (...) {
+    return report(compiler::make_diagnostic("FFINTERNAL001", {}, compiler::source_mark{},
+                                            "compiler", "unexpected internal compiler failure"),
+                  4);
+  }
 }

@@ -72,7 +72,12 @@ target_include_directories(
   feedforge_compiler_frontend
   PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
 )
-target_compile_definitions(feedforge_compiler_frontend PRIVATE TOML_EXCEPTIONS=0)
+target_compile_definitions(
+  feedforge_compiler_frontend
+  PRIVATE
+    TOML_EXCEPTIONS=0
+    TOML_MAX_NESTED_VALUES=32
+)
 target_link_libraries(
   feedforge_compiler_frontend
   PRIVATE tomlplusplus::tomlplusplus

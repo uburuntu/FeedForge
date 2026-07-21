@@ -7,11 +7,12 @@
 #include <fstream>
 #include <optional>
 #include <ranges>
-#include <sstream>
 #include <string>
 #include <utility>
 
 #include <toml++/toml.hpp>
+
+#include "compiler_limits.hpp"
 
 namespace feedforge::compiler {
 namespace {
@@ -29,6 +30,48 @@ namespace fs = std::filesystem;
   return mark_from(node.source());
 }
 
+[[nodiscard]] diagnostic limit_problem(const std::string_view source_path, const source_mark& mark,
+                                       std::string object_path, std::string message) {
+  return make_diagnostic("FFLIMIT001", std::string(source_path), mark, std::move(object_path),
+                         std::move(message));
+}
+
+void count_toml_nodes(const toml::node& node, std::size_t& count) {
+  if (count > limits::toml_nodes) {
+    return;
+  }
+  ++count;
+  if (const toml::table* table = node.as_table(); table != nullptr) {
+    for (const auto& [key, child] : *table) {
+      static_cast<void>(key);
+      count_toml_nodes(child, count);
+      if (count > limits::toml_nodes) {
+        return;
+      }
+    }
+  } else if (const toml::array* array = node.as_array(); array != nullptr) {
+    for (const toml::node& child : *array) {
+      count_toml_nodes(child, count);
+      if (count > limits::toml_nodes) {
+        return;
+      }
+    }
+  }
+}
+
+[[nodiscard]] result<toml::table> enforce_document_limits(toml::table document,
+                                                          const std::string_view source_path,
+                                                          const std::string_view object_path) {
+  std::size_t node_count = 0U;
+  count_toml_nodes(document, node_count);
+  if (node_count > limits::toml_nodes) {
+    return std::unexpected(
+        limit_problem(source_path, mark_from(document), std::string(object_path),
+                      std::string(object_path) + " exceeds the 32768-node TOML limit"));
+  }
+  return document;
+}
+
 [[nodiscard]] diagnostic structural_problem(
     const std::string_view source_path, const source_mark& mark,
     std::string code, std::string object_path, std::string message) {
@@ -39,9 +82,15 @@ namespace fs = std::filesystem;
 [[nodiscard]] result<toml::table> parse_document(
     const std::string_view text, const std::string_view source_path,
     const std::string_view object_path) {
+  if (text.size() > limits::source_bytes) {
+    return std::unexpected(
+        limit_problem(source_path, source_mark{}, std::string(object_path),
+                      std::string(object_path) + " source exceeds the 1048576-byte limit"));
+  }
 #if TOML_EXCEPTIONS
   try {
-    return toml::parse(text, std::string(source_path));
+    return enforce_document_limits(toml::parse(text, std::string(source_path)), source_path,
+                                   object_path);
   } catch (const toml::parse_error& error) {
     return std::unexpected(structural_problem(
         source_path, mark_from(error.source()), "FFTOML001",
@@ -55,7 +104,7 @@ namespace fs = std::filesystem;
         source_path, mark_from(error.source()), "FFTOML001",
         std::string(object_path), std::string(error.description())));
   }
-  return std::move(parsed).table();
+  return enforce_document_limits(std::move(parsed).table(), source_path, object_path);
 #endif
 }
 
@@ -184,6 +233,13 @@ template <std::size_t Size>
   if (!description) {
     return std::unexpected(std::move(description.error()));
   }
+  if (*description && (*description)->size() > limits::documentation_bytes) {
+    const toml::node* node = table.get("description");
+    return std::unexpected(limit_problem(source_path,
+                                         node == nullptr ? mark_from(table) : mark_from(*node),
+                                         std::string(object_path) + ".description",
+                                         "description exceeds the 4096-byte documentation limit"));
+  }
   if (!include_spec_metadata) {
     return {};
   }
@@ -191,6 +247,13 @@ template <std::size_t Size>
       optional_string(table, "spec_section", source_path, object_path, type_code);
   if (!section) {
     return std::unexpected(std::move(section.error()));
+  }
+  if (*section && (*section)->size() > limits::documentation_bytes) {
+    const toml::node* node = table.get("spec_section");
+    return std::unexpected(limit_problem(source_path,
+                                         node == nullptr ? mark_from(table) : mark_from(*node),
+                                         std::string(object_path) + ".spec_section",
+                                         "spec_section exceeds the 4096-byte provenance limit"));
   }
   auto page =
       optional_integer(table, "spec_page", source_path, object_path, type_code);
@@ -222,8 +285,14 @@ template <std::size_t Size>
         std::string(object_path) + "." + std::string(key),
         "key '" + std::string(key) + "' must be an array of strings"));
   }
+  if (key == "allowed" && array->size() > limits::allowed_values_per_field) {
+    return std::unexpected(limit_problem(source_path, mark_from(*node),
+                                         std::string(object_path) + "." + std::string(key),
+                                         "allowed exceeds the 256-value per-field limit"));
+  }
   std::vector<std::string> values;
   values.reserve(array->size());
+  std::size_t total_bytes = 0U;
   for (const toml::node& item : *array) {
     auto value = item.value<std::string>();
     if (!value) {
@@ -232,6 +301,12 @@ template <std::size_t Size>
           std::string(object_path) + "." + std::string(key),
           "key '" + std::string(key) + "' must contain only strings"));
     }
+    if (key == "allowed" && value->size() > limits::allowed_value_bytes_per_field - total_bytes) {
+      return std::unexpected(limit_problem(source_path, mark_from(item),
+                                           std::string(object_path) + "." + std::string(key),
+                                           "allowed values exceed the 65535-byte per-field limit"));
+    }
+    total_bytes += value->size();
     values.push_back(std::move(*value));
   }
   return values;
@@ -246,20 +321,42 @@ template <std::size_t Size>
         "FFIO001", std::string(source_path), source_mark{},
         std::string(object_path), "input is not a readable regular file"));
   }
+  const std::uintmax_t file_size = fs::file_size(path, error);
+  if (error) {
+    return std::unexpected(make_diagnostic("FFIO001", std::string(source_path), source_mark{},
+                                           std::string(object_path),
+                                           "failed to inspect input file size"));
+  }
+  if (file_size > limits::source_bytes) {
+    return std::unexpected(
+        limit_problem(source_path, source_mark{}, std::string(object_path),
+                      std::string(object_path) + " source exceeds the 1048576-byte limit"));
+  }
   std::ifstream input{path, std::ios::binary};
   if (!input) {
     return std::unexpected(make_diagnostic(
         "FFIO001", std::string(source_path), source_mark{},
         std::string(object_path), "failed to open input file for reading"));
   }
-  std::ostringstream contents;
-  contents << input.rdbuf();
-  if (input.bad()) {
+  std::string contents;
+  contents.reserve(static_cast<std::size_t>(file_size));
+  std::array<char, 8192U> buffer{};
+  while (input) {
+    input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+    const auto count = static_cast<std::size_t>(input.gcount());
+    if (count > limits::source_bytes - contents.size()) {
+      return std::unexpected(
+          limit_problem(source_path, source_mark{}, std::string(object_path),
+                        std::string(object_path) + " source exceeds the 1048576-byte limit"));
+    }
+    contents.append(buffer.data(), count);
+  }
+  if (!input.eof()) {
     return std::unexpected(make_diagnostic(
         "FFIO001", std::string(source_path), source_mark{},
         std::string(object_path), "failed while reading input file"));
   }
-  return std::move(contents).str();
+  return contents;
 }
 
 }  // namespace
@@ -360,6 +457,10 @@ result<schema_source> parse_schema_toml(const std::string_view text,
           source_path, mark_from(*types_node), "FFSCHEMA004", "schema.types",
           "types must be an array of tables"));
     }
+    if (types->size() > limits::user_types) {
+      return std::unexpected(limit_problem(source_path, mark_from(*types_node), "schema.types",
+                                           "schema.types exceeds the 256-type limit"));
+    }
     constexpr std::array type_keys{
         std::string_view{"name"},        std::string_view{"kind"},
         std::string_view{"width"},       std::string_view{"logical"},
@@ -435,6 +536,10 @@ result<schema_source> parse_schema_toml(const std::string_view text,
         source_path, mark_from(*messages_node), "FFSCHEMA004",
         "schema.messages", "messages must be an array of tables"));
   }
+  if (messages->size() > limits::messages) {
+    return std::unexpected(limit_problem(source_path, mark_from(*messages_node), "schema.messages",
+                                         "schema.messages exceeds the 94-message limit"));
+  }
   constexpr std::array message_keys{
       std::string_view{"name"},         std::string_view{"type"},
       std::string_view{"size"},         std::string_view{"description"},
@@ -449,6 +554,7 @@ result<schema_source> parse_schema_toml(const std::string_view text,
       std::string_view{"spec_section"}, std::string_view{"spec_page"},
   };
   source.messages.reserve(messages->size());
+  std::size_t total_fields = 0U;
   for (std::size_t message_index = 0; message_index < messages->size();
        ++message_index) {
     const toml::node& item = (*messages)[message_index];
@@ -496,6 +602,16 @@ result<schema_source> parse_schema_toml(const std::string_view text,
     if (!fields) {
       return std::unexpected(std::move(fields.error()));
     }
+    if ((*fields)->size() > limits::fields_per_message) {
+      return std::unexpected(limit_problem(source_path, mark_from(**fields),
+                                           object_path + ".fields",
+                                           "message fields exceed the 1024-field limit"));
+    }
+    if ((*fields)->size() > limits::total_schema_fields - total_fields) {
+      return std::unexpected(limit_problem(source_path, mark_from(**fields), "schema.messages",
+                                           "schema exceeds the 8192-field total limit"));
+    }
+    total_fields += (*fields)->size();
 
     message_source parsed_message{
         .mark = mark_from(*table),
@@ -674,12 +790,17 @@ result<pipeline_source> parse_pipeline_toml(
         source_path, mark_from(*emit_node), "FFPIPE004", "pipeline.emit",
         "emit must be an array of tables"));
   }
+  if (emits->size() > limits::projections) {
+    return std::unexpected(limit_problem(source_path, mark_from(*emit_node), "pipeline.emit",
+                                         "pipeline.emit exceeds the 94-projection limit"));
+  }
   constexpr std::array emit_keys{
       std::string_view{"source"},
       std::string_view{"event"},
       std::string_view{"fields"},
   };
   source.projections.reserve(emits->size());
+  std::size_t total_projected_fields = 0U;
   for (std::size_t index = 0; index < emits->size(); ++index) {
     const toml::node& item = (*emits)[index];
     const toml::table* table = item.as_table();
@@ -710,6 +831,17 @@ result<pipeline_source> parse_pipeline_toml(
     if (!fields) {
       return std::unexpected(std::move(fields.error()));
     }
+    if ((*fields)->size() > limits::fields_per_projection) {
+      return std::unexpected(limit_problem(source_path, mark_from(**fields),
+                                           object_path + ".fields",
+                                           "projection fields exceed the 1024-field limit"));
+    }
+    if ((*fields)->size() > limits::total_projected_fields - total_projected_fields) {
+      return std::unexpected(
+          limit_problem(source_path, mark_from(**fields), "pipeline.emit",
+                        "pipeline exceeds the 8192-projected-field total limit"));
+    }
+    total_projected_fields += (*fields)->size();
     if (!event->empty()) {
       object_path = "pipeline.emit." + *event;
     }

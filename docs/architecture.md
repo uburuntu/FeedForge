@@ -99,11 +99,11 @@ The runtime is protocol- and pipeline-independent. It supplies:
 
 The runtime does not know schema message names, projected event sets, or user
 sinks. Generated events own decoded values; borrowed frame spans remain tied to
-the caller-owned input. Source compatibility is checked with
-`feedforge::runtime_api_version`; FeedForge does not promise a stable binary
-ABI.
+the caller-owned input. Source compatibility is checked with a runtime API
+epoch and minimum revision; FeedForge does not promise a stable binary ABI.
+See [Compatibility](compatibility.md).
 
-The v0.2 chunked cursor carries only prefix, payload-progress, ordinal, and
+The chunked cursor carries only prefix, payload-progress, ordinal, and
 absolute-offset state between calls. Split payload bytes live in a caller-owned
 bounded scratch span. The generated `chunked_replayer` couples that protocol-
 independent cursor to the pipeline decoder and sink without adding I/O,

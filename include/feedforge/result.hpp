@@ -51,8 +51,8 @@ struct replay_summary {
   std::uint64_t events_emitted{};
   std::uint64_t known_messages_skipped{};
   std::uint64_t unknown_messages_skipped{};
-  std::size_t bytes_consumed{};
-  std::size_t error_offset{};
+  std::uint64_t bytes_consumed{};
+  std::uint64_t error_offset{};
   feedforge::framing_errc framing_error{};
   feedforge::decode_outcome decode_error{};
 };

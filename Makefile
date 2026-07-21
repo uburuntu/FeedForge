@@ -391,14 +391,13 @@ pipeline-compile: ## Generate PIPELINE under build/ (override GENERATED_OUTPUT)
 	@"$(FEEDFORGEC)" compile --schema "$(SCHEMA)" --pipeline "$(PIPELINE)" --output "$(GENERATED_OUTPUT)"
 	@printf '%s\n' "$(GENERATED_OUTPUT)"
 
-pipeline-ir: ## Generate PIPELINE and dump canonical FFIR under build/
-	$(call guard_build_output,$(GENERATED_OUTPUT))
+pipeline-ir: ## Dump canonical FFIR for PIPELINE under build/
 	$(call guard_build_output,$(IR_OUTPUT))
 	+@$(MAKE) --no-print-directory compiler
 	$(call announce,Dumping FFIR for $(PIPELINE))
-	@"$(FEEDFORGEC)" compile --schema "$(SCHEMA)" --pipeline "$(PIPELINE)" \
-		--output "$(GENERATED_OUTPUT)" --dump-ir "$(IR_OUTPUT)"
-	@printf '%s\n%s\n' "$(GENERATED_OUTPUT)" "$(IR_OUTPUT)"
+	@"$(FEEDFORGEC)" dump-ir --schema "$(SCHEMA)" --pipeline "$(PIPELINE)" \
+		--output "$(IR_OUTPUT)"
+	@printf '%s\n' "$(IR_OUTPUT)"
 
 replay: ## Build replay example and run REPLAY_FILE
 	@set -eu; test -n "$(REPLAY_FILE)" && test -f "$(REPLAY_FILE)" || { \

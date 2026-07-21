@@ -129,6 +129,8 @@ static_assert(unknown.is_error() && unknown.is_terminal());
 static_assert(wrong_size.is_error() && wrong_size.is_terminal());
 static_assert(std::is_trivially_copyable_v<feedforge::decode_outcome>);
 static_assert(std::is_trivially_copyable_v<feedforge::replay_summary>);
+static_assert(std::same_as<decltype(feedforge::replay_summary{}.bytes_consumed), std::uint64_t>);
+static_assert(std::same_as<decltype(feedforge::replay_summary{}.error_offset), std::uint64_t>);
 
 struct test_implementation {
   static constexpr std::string_view variant_id = "test.v1";
@@ -166,8 +168,9 @@ struct wrong_result_sink {
 static_assert(feedforge::sink_for<accepting_sink, test_event>);
 static_assert(!feedforge::sink_for<throwing_sink, test_event>);
 static_assert(!feedforge::sink_for<wrong_result_sink, test_event>);
-static_assert(feedforge::runtime_api_version == 2);
-static_assert(feedforge::version_string == "0.2.0");
+static_assert(feedforge::runtime_api_epoch == 1);
+static_assert(feedforge::runtime_api_revision == 0);
+static_assert(feedforge::version_string == "0.3.0");
 
 }  // namespace
 
