@@ -103,7 +103,7 @@ FeedForge v0.3 provides:
 | Surface | Contract |
 |---|---|
 | Runtime and generated code | Strict C++20; GCC 11 or Clang 14 minimum |
-| Host compiler | C++23; GCC 13.2 or Clang 17 with a matching standard library |
+| Host compiler | C++23; GCC 13.2, Clang 17, or MSVC 19.38 (Visual Studio 2022 17.8), with a matching standard library |
 | Platform policy | Linux x86-64 Tier 1; macOS arm64 and Windows x64 Tier 2; emulated s390x big-endian probe |
 | Protocol scope | Nasdaq TotalView-ITCH 5.0 over in-memory BinaryFILE |
 | Delivery | Statically bound typed sinks with explicit stop/error outcomes |
@@ -118,7 +118,7 @@ limits.
 - CMake 3.25 or newer;
 - Ninja for the shared project presets;
 - a C++20 compiler for the runtime and generated code; and
-- a C++23 compiler and standard library when building `feedforgec`.
+- a supported C++23 compiler and standard library when building `feedforgec`.
 
 The project has no external runtime dependency. On POSIX development hosts,
 GNU Make is an optional source-tree command catalog; consumers and native

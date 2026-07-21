@@ -61,7 +61,10 @@ endfunction()
 
 function(feedforge_enable_warnings target)
   if(MSVC)
-    target_compile_options("${target}" PRIVATE /W4 /permissive-)
+    target_compile_options(
+      "${target}"
+      PRIVATE /W4 /permissive- /Zc:__cplusplus
+    )
     if(FEEDFORGE_WARNINGS_AS_ERRORS)
       target_compile_options("${target}" PRIVATE /WX)
     endif()
@@ -125,4 +128,3 @@ function(feedforge_configure_project_target target)
   feedforge_enable_warnings("${target}")
   feedforge_enable_sanitizers("${target}")
 endfunction()
-

@@ -269,8 +269,8 @@ The [main CI workflow](../.github/workflows/ci.yml) must cover:
   generation, and optional RTSan checks;
 - Linux x86-64 Tier 1 and full compiler/runtime coverage on macOS arm64
   AppleClang Tier 2;
-- Windows x64 MSVC 2022 runtime/generated coverage plus a ClangCL
-  clean-output compiler-generation gate;
+- Windows x64 Visual Studio 2022 full compiler/runtime coverage with native
+  MSVC 19.38 or newer, plus a ClangCL compiler/generated portability gate;
 - a release-blocking s390x big-endian portability probe under QEMU, which is
   emulation evidence rather than a physical-hardware support tier; and
 - the separate [Linux fuzz-smoke workflow](../.github/workflows/fuzz-smoke.yml)

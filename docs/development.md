@@ -31,6 +31,24 @@ ctest --preset dev
 cmake --build --preset dev --target check-generated
 ```
 
+On native Windows with Visual Studio 2022 17.8 or newer, the equivalent full
+MSVC validation is:
+
+```powershell
+cmake -S . -B build/msvc -G "Visual Studio 17 2022" -A x64 `
+  -DFEEDFORGE_BUILD_COMPILER=ON `
+  -DFEEDFORGE_BUILD_TESTS=ON `
+  -DFEEDFORGE_BUILD_EXAMPLES=ON `
+  -DFEEDFORGE_WARNINGS_AS_ERRORS=ON
+cmake --build build/msvc --config Debug
+ctest --test-dir build/msvc -C Debug --output-on-failure
+cmake --build build/msvc --config Debug --target check-generated
+```
+
+This path builds `feedforgec` with native MSVC, runs the compiler and runtime
+tests, and verifies that MSVC emits the committed canonical headers byte for
+byte.
+
 ## Command groups
 
 | Goal | Command |

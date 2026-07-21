@@ -1,6 +1,13 @@
 include(CheckCXXSourceCompiles)
 include(FetchContent)
 
+if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" AND MSVC_VERSION LESS 1938)
+  message(
+    FATAL_ERROR
+    "feedforgec requires MSVC 19.38 or newer (Visual Studio 2022 17.8)"
+  )
+endif()
+
 function(feedforge_check_host_features)
   set(CMAKE_CXX_STANDARD 23)
   set(CMAKE_CXX_STANDARD_REQUIRED YES)
