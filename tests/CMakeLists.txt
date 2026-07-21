@@ -16,6 +16,22 @@ foreach(_export_target IN ITEMS
   endforeach()
 endforeach()
 
+add_test(
+  NAME packaging.vcpkg_overlay_metadata
+  COMMAND
+    "${CMAKE_COMMAND}"
+    "-DSOURCE_DIR=${PROJECT_SOURCE_DIR}"
+    "-DPROJECT_VERSION=${PROJECT_VERSION}"
+    -P
+    "${PROJECT_SOURCE_DIR}/packaging/vcpkg/tests/validate_metadata.cmake"
+)
+set_tests_properties(
+  packaging.vcpkg_overlay_metadata
+  PROPERTIES
+    LABELS packaging
+    TIMEOUT 10
+)
+
 if(TARGET feedforgec)
   add_test(
     NAME compiler.version

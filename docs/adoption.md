@@ -169,6 +169,11 @@ event order, and stop behavior match `replay_binary_file()`.
 An installed config package is the shortest and most reproducible integration
 path. No component selection or manual include directory is required.
 
+Consumers using vcpkg can build the same config package from FeedForge's
+repository-owned overlay. See the [local vcpkg overlay guide](vcpkg.md) for the
+pinned baseline, runtime-only default, optional compiler feature, and validation
+commands.
+
 For a pinned source dependency, `FetchContent` is also sufficient:
 
 ```cmake

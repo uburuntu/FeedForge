@@ -261,6 +261,32 @@ jobs:
       - name: Build and run external consumer
         run: cmake --build build/consumer --target run-feedforge-consumer
 
+  vcpkg-overlay:
+    name: Tier 1 / local vcpkg overlay / runtime+compiler
+    runs-on: ubuntu-24.04
+    env:
+      VCPKG_BINARY_SOURCES: clear
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Bootstrap pinned vcpkg
+        run: |
+          git init "${RUNNER_TEMP}/vcpkg"
+          git -C "${RUNNER_TEMP}/vcpkg" remote add origin \
+            https://github.com/microsoft/vcpkg.git
+          git -C "${RUNNER_TEMP}/vcpkg" fetch --depth=1 origin \
+            3ddaad9be959816602453ecb05533f8732464ef4
+          git -C "${RUNNER_TEMP}/vcpkg" checkout --detach FETCH_HEAD
+          test "$(git -C "${RUNNER_TEMP}/vcpkg" rev-parse HEAD)" = \
+            3ddaad9be959816602453ecb05533f8732464ef4
+          "${RUNNER_TEMP}/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
+      - name: Validate runtime and compiler overlay consumers
+        run: >-
+          cmake
+          -DSOURCE_DIR="${GITHUB_WORKSPACE}"
+          -DVCPKG_ROOT="${RUNNER_TEMP}/vcpkg"
+          -DBUILD_ROOT="${RUNNER_TEMP}/feedforge-vcpkg-validation"
+          -P packaging/vcpkg/tests/run_overlay.cmake
+
   optional-rtsan:
     name: Tier 1 / optional current-Clang RTSan smoke
     runs-on: ubuntu-latest

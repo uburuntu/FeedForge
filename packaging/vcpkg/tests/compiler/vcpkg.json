@@ -1,0 +1,14 @@
+{
+  "name": "feedforge-vcpkg-compiler-validation",
+  "version-string": "0",
+  "builtin-baseline": "3ddaad9be959816602453ecb05533f8732464ef4",
+  "dependencies": [
+    {
+      "name": "feedforge",
+      "default-features": false,
+      "features": [
+        "compiler"
+      ]
+    }
+  ]
+}

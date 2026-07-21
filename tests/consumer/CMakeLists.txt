@@ -56,7 +56,8 @@ if(FEEDFORGE_CONSUMER_ACQUISITION STREQUAL "package")
       docs/pipeline-format.md
       docs/schema-audit.md
       docs/schema-format.md
-      docs/testing.md)
+      docs/testing.md
+      docs/vcpkg.md)
     if(NOT EXISTS "${FeedForge_DOC_DIR}/${_doc}")
       message(FATAL_ERROR "installed FeedForge document is missing: ${_doc}")
     endif()

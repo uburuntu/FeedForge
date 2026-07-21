@@ -237,6 +237,7 @@ certification, or production-trading guarantees.
 - [Pipeline format](docs/pipeline-format.md)
 - [Generated C++ API](docs/generated-api.md)
 - [Testing and fixture provenance](docs/testing.md)
+- [Local vcpkg overlay](docs/vcpkg.md)
 - [Benchmark contract](docs/benchmarking.md)
 - [Performance case study](docs/performance-case-study.md)
 - [Schema audit](docs/schema-audit.md)

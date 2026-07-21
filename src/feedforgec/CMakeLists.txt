@@ -1,6 +1,13 @@
 include(CheckCXXSourceCompiles)
 include(FetchContent)
 
+option(
+  FEEDFORGE_TOML_EXCEPTIONS
+  "Use the exception-enabled toml++ ABI"
+  OFF
+)
+mark_as_advanced(FEEDFORGE_TOML_EXCEPTIONS)
+
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" AND MSVC_VERSION LESS 1938)
   message(
     FATAL_ERROR
@@ -82,7 +89,7 @@ target_include_directories(
 target_compile_definitions(
   feedforge_compiler_frontend
   PRIVATE
-    TOML_EXCEPTIONS=0
+    "TOML_EXCEPTIONS=$<BOOL:${FEEDFORGE_TOML_EXCEPTIONS}>"
     TOML_MAX_NESTED_VALUES=32
 )
 target_link_libraries(
