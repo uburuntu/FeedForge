@@ -21,6 +21,9 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       CXXFLAGS: -stdlib=libc++
+      # Ubuntu's compiler-rt libFuzzer is built against libstdc++, while the
+      # compiler frontend needs libc++ for C++23 std::expected support.
+      LDFLAGS: -Wl,--no-as-needed,-lstdc++
     strategy:
       fail-fast: false
       matrix:
@@ -56,10 +59,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Install Clang C++ standard library
+      - name: Install Clang runtimes and C++ standard libraries
         run: |
           sudo apt-get update
-          sudo apt-get install -y libc++-18-dev libc++abi-18-dev
+          sudo apt-get install -y libclang-rt-18-dev libc++-18-dev libc++abi-18-dev
       - name: Configure Clang libFuzzer
         run: >-
           cmake --preset fuzz
