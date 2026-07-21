@@ -10,7 +10,7 @@ namespace feedforge {
 
 inline constexpr std::uint32_t runtime_api_epoch = 1;
 inline constexpr std::uint32_t runtime_api_revision = 0;
-inline constexpr std::string_view version_string = "0.4.0";
+inline constexpr std::string_view version_string = "0.5.0";
 
 }  // namespace feedforge
 

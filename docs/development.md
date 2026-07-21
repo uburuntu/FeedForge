@@ -18,9 +18,12 @@ make quick
 make dev
 ```
 
-`doctor` reports required tools and optional LLVM/Docker capabilities. `quick`
-runs the focused compiler and runtime suite. `dev` runs the full Debug suite,
-installed consumers, examples, and the byte-for-byte generated-header check.
+`doctor` reports required tools, Python conformance-bundle readiness, and
+optional LLVM/Docker capabilities. Python remains an optional development
+capability, so a missing or older interpreter is reported without failing the
+core environment check. `quick` runs the focused compiler and runtime suite.
+`dev` runs the full Debug suite, installed consumers, examples, and the
+byte-for-byte generated-header check.
 
 The equivalent direct commands remain supported:
 
@@ -76,6 +79,13 @@ byte.
 upstream LLVM with libFuzzer and RealtimeSanitizer support. Neither target
 replaces the required hosted Linux compiler matrix, Windows job, or Linux
 libFuzzer run.
+
+The synthetic conformance bundle requires Python 3.11 or newer. CMake always
+exposes the `conformance-bundle` target so it remains discoverable on machines
+without a suitable interpreter; building that target then fails with setup
+guidance while unrelated configure and build workflows remain available. The
+Make wrapper passes the interpreter selected by `PYTHON` to CMake. Run
+`make doctor` to check that interpreter before generation.
 
 ## Overrides
 

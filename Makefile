@@ -236,7 +236,18 @@ doctor: ## Check required tools and report optional local capabilities
 			fi; \
 		done; \
 	fi; \
-	if command -v "$(PYTHON)" >/dev/null 2>&1; then "$(PYTHON)" --version; else printf '  [optional] python3 missing (benchmark and release tooling unavailable)\n'; fi; \
+	if command -v "$(PYTHON)" >/dev/null 2>&1; then \
+		python_version="$$("$(PYTHON)" -c 'import platform; print(platform.python_version())' 2>/dev/null || true)"; \
+		if test -n "$$python_version"; then printf 'Python %s\n' "$$python_version"; fi; \
+		if "$(PYTHON)" -c 'import sys; raise SystemExit(sys.version_info < (3, 11))' >/dev/null 2>&1; then \
+			printf '  [ok] %-16s Python 3.11 or newer is available\n' 'conformance'; \
+		else \
+			printf '  [unavailable] conformance-bundle requires Python 3.11 or newer via PYTHON=%s\n' "$(PYTHON)"; \
+		fi; \
+	else \
+		printf '  [optional] %s missing (benchmark and release tooling unavailable)\n' "$(PYTHON)"; \
+		printf '  [unavailable] conformance-bundle requires Python 3.11 or newer\n'; \
+	fi; \
 	if command -v "$(LLVM_CXX)" >/dev/null 2>&1; then "$(LLVM_CXX)" --version | sed -n '1p'; else printf '  [optional] upstream LLVM missing (fuzz/RTSan unavailable)\n'; fi; \
 	if command -v "$(DOCKER)" >/dev/null 2>&1; then "$(DOCKER)" --version; else printf '  [optional] Docker missing (linux-smoke unavailable)\n'; fi; \
 	test "$$missing" -eq 0
@@ -362,7 +373,15 @@ demo: ## Build and run the embedded synthetic order-event showcase
 conformance-bundle: ## Generate deterministic synthetic conformance archives
 	$(call guard_build_output,$(CONFORMANCE_OUTPUT_DIR)/.feedforge-output-guard)
 	$(call announce,Generating the synthetic ITCH 5.0 conformance bundle)
-	@$(CMAKE) --preset "$(GENERATE_PRESET)" $(CMAKE_ARGS) \
+	@set -eu; \
+	python_path="$$(command -v "$(PYTHON)" 2>/dev/null || true)"; \
+	if test -z "$$python_path" || \
+		! "$$python_path" -c 'import sys; raise SystemExit(sys.version_info < (3, 11))' >/dev/null 2>&1; then \
+		printf 'conformance-bundle requires Python 3.11 or newer. Set PYTHON to a suitable interpreter (current: %s).\n' "$(PYTHON)" >&2; \
+		exit 2; \
+	fi; \
+	$(CMAKE) --preset "$(GENERATE_PRESET)" $(CMAKE_ARGS) \
+		"-DPython3_EXECUTABLE=$$python_path" \
 		"-DFEEDFORGE_CONFORMANCE_OUTPUT_DIR=$(CONFORMANCE_OUTPUT_DIR)"
 	@$(CMAKE_BUILD) --preset "$(GENERATE_PRESET)" --target conformance-bundle $(PARALLEL)
 	@printf '%s\n%s\n' \

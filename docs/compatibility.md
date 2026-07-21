@@ -7,8 +7,8 @@ separately. They are related, but none is a substitute for another.
 ## Package versions
 
 FeedForge follows semantic versioning. Before 1.0, installed CMake packages use
-same-minor compatibility: a consumer requesting 0.3 will not silently accept
-0.4. Source compatibility may change between pre-1.0 minor releases and is
+same-minor compatibility: a consumer requesting 0.4 will not silently accept
+0.5. Source compatibility may change between pre-1.0 minor releases and is
 described in each release's notes.
 
 FeedForge does not promise a stable binary ABI. Rebuild consumers and generated

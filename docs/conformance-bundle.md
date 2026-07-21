@@ -41,7 +41,7 @@ Every archive contains one top-level directory named
 | `expected/negative.json` | Expected decode status and sizes for the 48 negative payloads. |
 | `negative/framing/*.binaryfile` | Complete-empty, incomplete, truncated, trailing-data, unknown-type, and invalid-size streams. |
 | `expected/framing.json` | Exact replay status, error, offset, consumption, and frame expectations. |
-| `PROVENANCE.json` | Fixture hashes, review markers, generator hash, and locked official-source metadata. |
+| `PROVENANCE.json` | Fixture, schema, pipeline, generator, and source-lock hashes plus locked official-source metadata. |
 | `manifest.json` | Byte length and SHA-256 of every other file in the bundle. |
 | `README.md`, `LICENSE.txt` | Standalone use notes and Apache License 2.0 text. |
 
@@ -57,10 +57,22 @@ final newline. Fixed-width ASCII expected values retain trailing spaces.
 
 ## Reproducibility
 
-The generator validates that exactly 23 contiguous, approved fixtures are
-present and that discriminator, size, positive expectation, and boundary-case
-metadata agree before writing output. It fully replaces the versioned expanded
-directory so stale cases cannot survive regeneration.
+The generator validates each fixture against the canonical ITCH schema and the
+two named canonical pipelines before writing output. Message identity, size,
+decoded field order, and projection decisions must agree exactly. Every expected
+field value and value type is re-decoded from the raw payload using the schema's
+wire offsets and widths. Fixture section and ordered page citations must match
+the schema's message and field citations exactly. Wildcards are expanded in
+schema wire order while discriminator and reserved fields remain
+non-projectable. Review status, reviewer, byte-source marker, and ISO review
+date are also checked rather than copied without interpretation.
+
+The source lock must identify exactly the reviewed ITCH and BinaryFILE documents
+with canonical URLs, retrieved status, and pinned digest, size, version, and
+revision metadata. The bundled license must match the repository's pinned Apache
+License 2.0 bytes. Expectations must contain only JSON-compatible values and
+non-finite floating-point values are rejected. The generator fully replaces the
+versioned expanded directory so stale cases cannot survive regeneration.
 
 Both archive formats have lexically ordered members, fixed modes, no user or
 group names, and fixed timestamps. ZIP entries are stored without compression.
@@ -71,9 +83,14 @@ inputs is therefore byte-for-byte reproducible.
 ## Verification
 
 `conformance.bundle_generator` generates the bundle twice, compares both
-archives byte-for-byte, verifies member metadata and extraction, re-derives
-every payload and BinaryFILE frame from the reviewed manifests, and checks all
-manifest hashes.
+archives byte-for-byte, and verifies member metadata and extraction. It
+reconstructs every normalized message record, negative payload record, framing
+record, and stream from the reviewed fixture manifests, schema, and pipelines.
+It also compares the complete provenance records with the canonical inputs,
+verifies generator, schema, pipeline, source-lock, and fixture hashes, checks the
+pinned license and every manifest entry, and confirms that semantic projection,
+review, expectation-value, source-lock, schema, and license mutations are
+rejected.
 
 `integration.conformance_bundle` consumes the generated files as C++20. Every
 positive and decode-negative payload is classified by the independent ITCH

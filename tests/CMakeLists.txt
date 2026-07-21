@@ -108,6 +108,12 @@ if(TARGET feedforge_conformance_bundle_assets)
       "${PROJECT_SOURCE_DIR}/schemas/sources.lock.toml"
       --license
       "${PROJECT_SOURCE_DIR}/LICENSE"
+      --schema
+      "${PROJECT_SOURCE_DIR}/schemas/nasdaq/totalview_itch_5_0.toml"
+      --all-messages-pipeline
+      "${PROJECT_SOURCE_DIR}/pipelines/all_messages.toml"
+      --order-events-pipeline
+      "${PROJECT_SOURCE_DIR}/pipelines/order_events.toml"
   )
   set_tests_properties(
     conformance.bundle_generator

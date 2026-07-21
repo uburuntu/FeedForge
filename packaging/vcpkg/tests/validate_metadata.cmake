@@ -93,7 +93,13 @@ foreach(_required_text IN ITEMS
 endforeach()
 
 file(READ "${SOURCE_DIR}/.github/workflows/ci.yml" _workflow)
-string(FIND "${_workflow}" "${_baseline}" _position)
-if(_position EQUAL -1)
-  message(FATAL_ERROR "CI workflow is missing the pinned vcpkg baseline")
-endif()
+foreach(_required_text IN ITEMS
+    "${_baseline}"
+    "  vcpkg-overlay:"
+    "      - vcpkg-overlay"
+    "VCPKG_BINARY_SOURCES: clear")
+  string(FIND "${_workflow}" "${_required_text}" _position)
+  if(_position EQUAL -1)
+    message(FATAL_ERROR "CI workflow is missing: ${_required_text}")
+  endif()
+endforeach()

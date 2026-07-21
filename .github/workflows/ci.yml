@@ -261,6 +261,48 @@ jobs:
       - name: Build and run external consumer
         run: cmake --build build/consumer --target run-feedforge-consumer
 
+  conformance-bundle:
+    name: Tier 1 / Python 3.11 / synthetic conformance bundle
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: "3.11"
+      - name: Confirm Python compatibility floor
+        run: >-
+          python3 -c
+          'import sys; print(sys.version); assert sys.version_info[:2] == (3, 11)'
+      - name: Verify missing-Python target guidance
+        run: |
+          cmake -S . -B build/no-python -G Ninja \
+            -DCMAKE_DISABLE_FIND_PACKAGE_Python3=TRUE \
+            -DFEEDFORGE_BUILD_COMPILER=OFF \
+            -DFEEDFORGE_BUILD_TESTS=OFF \
+            -DFEEDFORGE_BUILD_EXAMPLES=OFF
+          cmake --build build/no-python --target help | grep -F conformance-bundle
+          if cmake --build build/no-python --target conformance-bundle \
+              >"${RUNNER_TEMP}/no-python.log" 2>&1; then
+            printf 'conformance-bundle unexpectedly succeeded without Python\n' >&2
+            exit 1
+          fi
+          cat "${RUNNER_TEMP}/no-python.log"
+          grep -F "requires Python 3.11 or newer" "${RUNNER_TEMP}/no-python.log"
+      - name: Configure exact Python conformance surface
+        run: >-
+          cmake --preset dev
+          -DPython3_EXECUTABLE="$(command -v python3)"
+          -DFEEDFORGE_WARNINGS_AS_ERRORS=ON
+      - name: Build conformance archives and C++ consumer
+        run: >-
+          cmake --build --preset dev --target
+          conformance-bundle
+          feedforge_test_integration_conformance_bundle
+      - name: Run both required conformance tests
+        run: >-
+          ctest --test-dir build/dev --output-on-failure --no-tests=error
+          -R '^(conformance\.bundle_generator|integration\.conformance_bundle)$'
+
   vcpkg-overlay:
     name: Tier 1 / local vcpkg overlay / runtime+compiler
     runs-on: ubuntu-24.04
@@ -407,6 +449,8 @@ jobs:
       - sanitizers
       - release
       - installed-consumer
+      - conformance-bundle
+      - vcpkg-overlay
       - optional-rtsan
       - macos-appleclang
       - windows-msvc

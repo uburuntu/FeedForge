@@ -1,6 +1,6 @@
 {
   "name": "feedforge",
-  "version": "0.2.0",
+  "version": "0.5.0",
   "description": "Ahead-of-time compiler and C++20 runtime for checked market-data decode pipelines",
   "homepage": "https://github.com/uburuntu/FeedForge",
   "license": "Apache-2.0",

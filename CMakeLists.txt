@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.25)
 
 project(
   FeedForge
-  VERSION 0.4.0
+  VERSION 0.5.0
   DESCRIPTION "Ahead-of-time compiler for checked market-data decode pipelines"
   HOMEPAGE_URL "https://github.com/uburuntu/FeedForge"
   LANGUAGES CXX
@@ -27,14 +27,14 @@ include(FeedForgeWarnings)
 feedforge_detect_rtsan()
 
 if(PROJECT_IS_TOP_LEVEL)
+  set(
+    FEEDFORGE_CONFORMANCE_OUTPUT_DIR
+    "${CMAKE_CURRENT_BINARY_DIR}/conformance"
+    CACHE PATH
+    "Output directory for generated synthetic conformance bundles"
+  )
   find_package(Python3 3.11 QUIET COMPONENTS Interpreter)
   if(Python3_Interpreter_FOUND)
-    set(
-      FEEDFORGE_CONFORMANCE_OUTPUT_DIR
-      "${CMAKE_CURRENT_BINARY_DIR}/conformance"
-      CACHE PATH
-      "Output directory for generated synthetic conformance bundles"
-    )
     set(
       FEEDFORGE_CONFORMANCE_BUNDLE_ROOT
       "${FEEDFORGE_CONFORMANCE_OUTPUT_DIR}/feedforge-itch50-conformance-v1"
@@ -46,6 +46,18 @@ if(PROJECT_IS_TOP_LEVEL)
     set(
       _feedforge_conformance_zip
       "${FEEDFORGE_CONFORMANCE_OUTPUT_DIR}/feedforge-itch50-conformance-v1.zip"
+    )
+    set(
+      _feedforge_conformance_schema
+      "${CMAKE_CURRENT_SOURCE_DIR}/schemas/nasdaq/totalview_itch_5_0.toml"
+    )
+    set(
+      _feedforge_conformance_all_pipeline
+      "${CMAKE_CURRENT_SOURCE_DIR}/pipelines/all_messages.toml"
+    )
+    set(
+      _feedforge_conformance_order_pipeline
+      "${CMAKE_CURRENT_SOURCE_DIR}/pipelines/order_events.toml"
     )
     file(
       GLOB _feedforge_conformance_fixtures
@@ -63,11 +75,17 @@ if(PROJECT_IS_TOP_LEVEL)
         --fixtures-dir "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/itch50"
         --source-lock "${CMAKE_CURRENT_SOURCE_DIR}/schemas/sources.lock.toml"
         --license "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
+        --schema "${_feedforge_conformance_schema}"
+        --all-messages-pipeline "${_feedforge_conformance_all_pipeline}"
+        --order-events-pipeline "${_feedforge_conformance_order_pipeline}"
         --output-dir "${FEEDFORGE_CONFORMANCE_OUTPUT_DIR}"
       DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_conformance_bundle.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/schemas/sources.lock.toml"
         "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
+        "${_feedforge_conformance_schema}"
+        "${_feedforge_conformance_all_pipeline}"
+        "${_feedforge_conformance_order_pipeline}"
         ${_feedforge_conformance_fixtures}
       COMMENT "Generating deterministic synthetic ITCH 5.0 conformance archives"
       VERBATIM
@@ -87,7 +105,16 @@ if(PROJECT_IS_TOP_LEVEL)
   else()
     message(
       STATUS
-      "Python 3.11 or newer was not found; conformance-bundle is unavailable"
+      "Python 3.11 or newer was not found; conformance-bundle will provide setup guidance when built"
+    )
+    add_custom_target(
+      conformance-bundle
+      COMMAND
+        "${CMAKE_COMMAND}" -E echo
+        "FeedForge conformance-bundle requires Python 3.11 or newer. Install it and reconfigure this build tree."
+      COMMAND "${CMAKE_COMMAND}" -E false
+      COMMENT "Cannot generate the conformance bundle without Python 3.11 or newer"
+      VERBATIM
     )
   endif()
 endif()
@@ -397,6 +424,9 @@ install(
     .cursor/skills/feedforge-pipeline-authoring
   DESTINATION "${CMAKE_INSTALL_DATADIR}/feedforge/skills"
   COMPONENT Development
+  FILES_MATCHING
+    PATTERN "*.md"
+    PATTERN ".*" EXCLUDE
 )
 install(
   DIRECTORY examples/consumer-template

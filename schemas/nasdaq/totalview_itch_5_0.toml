@@ -548,7 +548,7 @@ type = "W"
 size = 12
 description = "Market-Wide Circuit Breaker Status Message"
 spec_section = "1.2.5.2"
-spec_page = 11
+spec_page = 10
 
 [[messages.fields]]
 name = "message_type"
@@ -1248,7 +1248,7 @@ type = "U"
 size = 35
 description = "Order Replace Message"
 spec_section = "1.4.5"
-spec_page = 16
+spec_page = 15
 
 [[messages.fields]]
 name = "message_type"

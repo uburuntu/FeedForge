@@ -13,7 +13,7 @@ pipelines. Its scope is deliberately narrow: compile a declarative
 Nasdaq TotalView-ITCH 5.0 projection into strict C++20, then replay Nasdaq
 BinaryFILE data through a statically bound sink.
 
-FeedForge v0.4.0 is an **offline checked decoder**, not a feed handler or trading
+FeedForge v0.5.0 is an **offline checked decoder**, not a feed handler or trading
 platform. It is experimental, is not exchange-certified, and is not production
 trading infrastructure.
 
@@ -87,7 +87,7 @@ environment limits, content IDs, and the redacted holdout conclusion.
 
 ## Scope
 
-FeedForge v0.4 provides:
+FeedForge v0.5 provides:
 
 - a header-only C++20 runtime exposed as `FeedForge::runtime`;
 - a C++23 host compiler exposed as `FeedForge::compiler`;
@@ -97,7 +97,9 @@ FeedForge v0.4 provides:
 - portable, bounds-checked one-shot and caller-buffered chunked BinaryFILE
   decoding;
 - an independently transcribed differential decode oracle and seven libFuzzer
-  targets spanning the runtime and compiler frontends; and
+  targets spanning the runtime and compiler frontends;
+- a validated local vcpkg overlay plus deterministic synthetic conformance
+  bundle tooling for portable integration checks; and
 - allocation-free FeedForge-owned work on the per-message decode path.
 
 | Surface | Contract |
@@ -119,6 +121,9 @@ limits.
 - Ninja for the shared project presets;
 - a C++20 compiler for the runtime and generated code; and
 - a supported C++23 compiler and standard library when building `feedforgec`.
+
+Python 3.11 or newer is required only to generate or verify the synthetic
+conformance bundle.
 
 The project has no external runtime dependency. On POSIX development hosts,
 GNU Make is an optional source-tree command catalog; consumers and native
@@ -220,7 +225,7 @@ runtime-only install configured with `FEEDFORGE_BUILD_COMPILER=OFF`; this path
 requires neither C++23 nor toml++. Custom generation requires an install that
 contains `FeedForge::compiler`.
 
-FeedForge v0.4 processes caller-provided Nasdaq BinaryFILE byte spans only. It
+FeedForge v0.5 processes caller-provided Nasdaq BinaryFILE byte spans only. It
 does not provide live networking, recovery, order-book reconstruction, exchange
 certification, or production-trading guarantees.
 
@@ -242,7 +247,7 @@ certification, or production-trading guarantees.
 - [Benchmark contract](docs/benchmarking.md)
 - [Performance case study](docs/performance-case-study.md)
 - [Schema audit](docs/schema-audit.md)
-- [v0.4.0 release notes](RELEASE_NOTES.md)
+- [v0.5.0 release notes](RELEASE_NOTES.md)
 
 ## Contributing and security
 

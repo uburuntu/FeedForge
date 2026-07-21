@@ -170,7 +170,7 @@ static_assert(!feedforge::sink_for<throwing_sink, test_event>);
 static_assert(!feedforge::sink_for<wrong_result_sink, test_event>);
 static_assert(feedforge::runtime_api_epoch == 1);
 static_assert(feedforge::runtime_api_revision == 0);
-static_assert(feedforge::version_string == "0.4.0");
+static_assert(feedforge::version_string == "0.5.0");
 
 }  // namespace
 

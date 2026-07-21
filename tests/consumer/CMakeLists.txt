@@ -51,6 +51,7 @@ if(FEEDFORGE_CONSUMER_ACQUISITION STREQUAL "package")
       docs/adr/0001-tomlplusplus.md
       docs/architecture.md
       docs/benchmarking.md
+      docs/conformance-bundle.md
       docs/development.md
       docs/generated-api.md
       docs/pipeline-format.md
