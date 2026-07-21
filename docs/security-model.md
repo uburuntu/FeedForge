@@ -11,6 +11,9 @@ infrastructure.
   beyond the published [compiler limits](compiler-limits.md).
 - Generated C++ is build input. Review and compile it with the same controls as
   other generated source; FeedForge does not execute it during generation.
+- Compiler output uses an exclusively created sibling temporary file followed
+  by platform-native atomic replacement. The caller still controls and must
+  trust the destination directory and storage stack.
 - BinaryFILE bytes are untrusted runtime input. Framing and exact message size
   are checked before projected loads. Runtime code performs no file or network
   I/O and owns no input memory.

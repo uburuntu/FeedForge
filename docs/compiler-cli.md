@@ -17,8 +17,12 @@ for inspection and reproducibility checks. FFIR JSON is not a stable public
 interchange format.
 
 The output must not name either input. The parent directory must already
-exist. A failed validation, emission, or write leaves an existing destination
-unchanged and removes compiler-owned temporary files.
+exist. FeedForge creates a temporary sibling exclusively, writes and flushes
+it, closes it, then atomically replaces the destination with `rename` on POSIX
+or `MoveFileExW` on Windows. A failed validation, emission, or write leaves an
+existing destination unchanged and removes compiler-owned temporary files.
+This is normal-operation atomicity, not a filesystem transaction or a power
+failure durability guarantee.
 
 ## Exit status
 
