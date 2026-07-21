@@ -79,6 +79,18 @@ void count_toml_nodes(const toml::node& node, std::size_t& count) {
                          std::move(object_path), std::move(message));
 }
 
+[[nodiscard]] diagnostic toml_problem(const toml::parse_error& error,
+                                      const std::string_view source_path,
+                                      const std::string_view object_path) {
+  const std::string description{error.description()};
+  if (description.find("exceeded maximum nested value depth") != std::string::npos) {
+    return limit_problem(source_path, mark_from(error.source()), std::string(object_path),
+                         std::string(object_path) + " exceeds the 32-value TOML nesting limit");
+  }
+  return structural_problem(source_path, mark_from(error.source()), "FFTOML001",
+                            std::string(object_path), description);
+}
+
 [[nodiscard]] result<toml::table> parse_document(
     const std::string_view text, const std::string_view source_path,
     const std::string_view object_path) {
@@ -92,17 +104,13 @@ void count_toml_nodes(const toml::node& node, std::size_t& count) {
     return enforce_document_limits(toml::parse(text, std::string(source_path)), source_path,
                                    object_path);
   } catch (const toml::parse_error& error) {
-    return std::unexpected(structural_problem(
-        source_path, mark_from(error.source()), "FFTOML001",
-        std::string(object_path), std::string(error.description())));
+    return std::unexpected(toml_problem(error, source_path, object_path));
   }
 #else
   toml::parse_result parsed = toml::parse(text, std::string(source_path));
   if (!parsed) {
     const toml::parse_error& error = parsed.error();
-    return std::unexpected(structural_problem(
-        source_path, mark_from(error.source()), "FFTOML001",
-        std::string(object_path), std::string(error.description())));
+    return std::unexpected(toml_problem(error, source_path, object_path));
   }
   return enforce_document_limits(std::move(parsed).table(), source_path, object_path);
 #endif

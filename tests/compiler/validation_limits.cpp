@@ -22,6 +22,14 @@ void test_source_and_document_limits(support::suite& tests) {
   tests.expect_error(compiler::parse_schema_toml(excessive_nodes, "nodes.toml"), "FFLIMIT001",
                      "schema", "32768-node", "excessive TOML nodes");
 
+  std::string excessive_nesting = "value = ";
+  excessive_nesting.append(limits::toml_nested_values, '[');
+  excessive_nesting += '0';
+  excessive_nesting.append(limits::toml_nested_values, ']');
+  excessive_nesting += '\n';
+  tests.expect_error(compiler::parse_schema_toml(excessive_nesting, "nesting.toml"), "FFLIMIT001",
+                     "schema", "32-value", "excessive TOML nesting");
+
   const std::string excessive_description(limits::documentation_bytes + 1U, 'x');
   const std::string documented = support::replace_once(
       tests, std::string{support::valid_schema_toml},

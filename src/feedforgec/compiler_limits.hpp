@@ -5,6 +5,7 @@
 namespace feedforge::compiler::limits {
 
 inline constexpr std::size_t source_bytes = 1U << 20U;
+inline constexpr std::size_t toml_nested_values = 32U;
 inline constexpr std::size_t toml_nodes = 32768U;
 inline constexpr std::size_t identifier_bytes = 128U;
 inline constexpr std::size_t namespace_bytes = 512U;
