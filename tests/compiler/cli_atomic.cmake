@@ -198,6 +198,28 @@ foreach(action IN ITEMS compile dump-ir)
   endif()
 endforeach()
 
+set(replace_directory "${WORK}/replace-directory")
+file(REMOVE_RECURSE "${replace_directory}")
+file(MAKE_DIRECTORY "${replace_directory}")
+file(WRITE "${replace_directory}/sentinel" "preserve-directory\n")
+execute_process(
+  COMMAND
+    "${COMPILER}" compile
+    --schema "${FIXTURES}/valid_schema.toml"
+    --pipeline "${FIXTURES}/valid_pipeline.toml"
+    --output "${replace_directory}"
+  RESULT_VARIABLE replace_directory_result
+  ERROR_VARIABLE replace_directory_stderr
+)
+if(NOT replace_directory_result EQUAL 3 OR
+   NOT replace_directory_stderr MATCHES "^FFIO002 ")
+  message(FATAL_ERROR "failed atomic replacement did not use exit 3 and FFIO002")
+endif()
+file(READ "${replace_directory}/sentinel" sentinel_after)
+if(NOT sentinel_after STREQUAL "preserve-directory\n")
+  message(FATAL_ERROR "failed atomic replacement modified its destination")
+endif()
+
 file(GLOB_RECURSE leftovers "${WORK}/*.feedforgec.tmp.*")
 if(leftovers)
   message(FATAL_ERROR "temporary output files remained: ${leftovers}")

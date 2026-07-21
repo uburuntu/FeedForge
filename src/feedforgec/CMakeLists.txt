@@ -91,7 +91,7 @@ target_link_libraries(
 )
 feedforge_configure_project_target(feedforge_compiler_frontend)
 
-add_executable(feedforgec main.cpp)
+add_executable(feedforgec atomic_output.cpp main.cpp)
 add_executable(FeedForge::compiler ALIAS feedforgec)
 set_target_properties(feedforgec PROPERTIES EXPORT_NAME compiler)
 target_compile_features(feedforgec PRIVATE cxx_std_23)

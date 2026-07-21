@@ -2,7 +2,6 @@
 #include <exception>
 #include <expected>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <optional>
 #include <string>
@@ -10,6 +9,7 @@
 #include <system_error>
 #include <utility>
 
+#include "atomic_output.hpp"
 #include "compiler_limits.hpp"
 #include "diagnostics.hpp"
 #include "emit_cpp.hpp"
@@ -124,21 +124,6 @@ void print_help(std::ostream& output) {
   return parsed;
 }
 
-[[nodiscard]] compiler::result<void> validate_output_parent(
-    const std::string_view destination, const std::string_view object_path) {
-  const fs::path path{destination};
-  const fs::path parent =
-      path.parent_path().empty() ? fs::path{"."} : path.parent_path();
-  std::error_code error;
-  if (!fs::is_directory(parent, error) || error) {
-    return std::unexpected(compiler::make_diagnostic(
-        "FFIO002", std::string(destination), compiler::source_mark{},
-        std::string(object_path),
-        "output parent directory does not exist or is not a directory"));
-  }
-  return {};
-}
-
 [[nodiscard]] bool same_filesystem_location(const std::string_view left,
                                             const std::string_view right) {
   if (left.empty() || right.empty()) {
@@ -162,81 +147,6 @@ void print_help(std::ostream& output) {
     return left_path.lexically_normal() == right_path.lexically_normal();
   }
   return absolute_left.lexically_normal() == absolute_right.lexically_normal();
-}
-
-[[nodiscard]] compiler::result<void> write_atomically(
-    const std::string_view destination, const std::string_view contents,
-    const std::string_view object_path) {
-  if (auto parent = validate_output_parent(destination, object_path); !parent) {
-    return std::unexpected(std::move(parent.error()));
-  }
-
-  const fs::path destination_path{destination};
-  fs::path temporary_path;
-  std::error_code error;
-  for (std::size_t attempt = 0U; attempt < 1024U; ++attempt) {
-    temporary_path =
-        destination_path.parent_path() /
-        (destination_path.filename().string() + ".feedforgec.tmp." +
-         std::to_string(attempt));
-    if (!fs::exists(temporary_path, error)) {
-      break;
-    }
-    if (error) {
-      return std::unexpected(compiler::make_diagnostic(
-          "FFIO002", std::string(destination), compiler::source_mark{},
-          std::string(object_path), "failed to inspect temporary output path"));
-    }
-    temporary_path.clear();
-  }
-  if (temporary_path.empty()) {
-    return std::unexpected(compiler::make_diagnostic(
-        "FFIO002", std::string(destination), compiler::source_mark{},
-        std::string(object_path),
-        "could not reserve a temporary sibling output path"));
-  }
-
-  {
-    std::ofstream output{temporary_path,
-                         std::ios::binary | std::ios::out | std::ios::trunc};
-    if (!output) {
-      output.close();
-      std::error_code ignored;
-      fs::remove(temporary_path, ignored);
-      return std::unexpected(compiler::make_diagnostic(
-          "FFIO002", std::string(destination), compiler::source_mark{},
-          std::string(object_path), "failed to create temporary output file"));
-    }
-    output.write(contents.data(),
-                 static_cast<std::streamsize>(contents.size()));
-    output.flush();
-    if (!output) {
-      output.close();
-      std::error_code ignored;
-      fs::remove(temporary_path, ignored);
-      return std::unexpected(compiler::make_diagnostic(
-          "FFIO002", std::string(destination), compiler::source_mark{},
-          std::string(object_path), "failed while writing temporary output"));
-    }
-    output.close();
-    if (!output) {
-      std::error_code ignored;
-      fs::remove(temporary_path, ignored);
-      return std::unexpected(compiler::make_diagnostic(
-          "FFIO002", std::string(destination), compiler::source_mark{},
-          std::string(object_path), "failed while closing temporary output"));
-    }
-  }
-
-  fs::rename(temporary_path, destination_path, error);
-  if (error) {
-    std::error_code ignored;
-    fs::remove(temporary_path, ignored);
-    return std::unexpected(compiler::make_diagnostic(
-        "FFIO002", std::string(destination), compiler::source_mark{},
-        std::string(object_path), "failed to atomically replace output file"));
-  }
-  return {};
 }
 
 int report(const compiler::diagnostic& problem, const int exit_code) {
@@ -283,10 +193,6 @@ int run(const options& parsed) {
                   2);
   }
 
-  if (auto parent = validate_output_parent(parsed.output, "output"); !parent) {
-    return report(parent.error(), 3);
-  }
-
   std::string rendered;
   if (parsed.action == command::compile) {
     auto rendered_cpp = compiler::emit_cpp(ir);
@@ -305,7 +211,7 @@ int run(const options& parsed) {
           2);
     }
   }
-  if (auto written = write_atomically(parsed.output, rendered, "output"); !written) {
+  if (auto written = compiler::write_file_atomically(parsed.output, rendered, "output"); !written) {
     return report(written.error(), 3);
   }
   return 0;
