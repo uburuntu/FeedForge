@@ -554,7 +554,7 @@ template <class Value>
   }
   std::ostringstream output;
   bool first = true;
-  for (int cpu = 0; cpu < CPU_SETSIZE; ++cpu) {
+  for (std::size_t cpu = 0U; cpu < static_cast<std::size_t>(CPU_SETSIZE); ++cpu) {
     if (CPU_ISSET(cpu, &allowed) == 0) {
       continue;
     }

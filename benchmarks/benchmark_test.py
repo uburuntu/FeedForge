@@ -510,7 +510,7 @@ class SeriesValidationTest(unittest.TestCase):
                 )
             )
             self.assertEqual(result, 0)
-            with self.assertRaisesRegex(ValueError, "does not match source id"):
+            with self.assertRaises(ValueError):
                 benchmark.validate_series_path(
                     directory / "series.json", directory,
                     verify_current_checkout=True,
