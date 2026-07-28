@@ -90,6 +90,13 @@ BENCH_LABEL ?=
 BENCH_SOURCE_ID ?=
 BENCH_OUTPUT_DIR ?= $(BUILD_ROOT)/bench/results/$(BENCH_LABEL)
 BENCH_EXECUTABLE ?= $(BUILD_ROOT)/bench/benchmarks/feedforge_benchmark
+BENCH_COOLDOWN_SECONDS ?= 120
+BENCH_CORRECTNESS_COMMAND ?= make bench-correctness
+BENCH_SERIES ?= $(BENCH_OUTPUT_DIR)/series.json
+BENCH_RUNS_DIR ?= $(BENCH_OUTPUT_DIR)
+BENCH_EVIDENCE_DIR ?= $(OUT_ROOT)/benchmark-evidence/$(BENCH_LABEL)
+BENCH_REDACT_INPUT ?= $(BENCH_OUTPUT_DIR)/correctness.txt
+BENCH_REDACT_OUTPUT ?= $(BENCH_EVIDENCE_DIR)/correctness.public.txt
 BENCH_BASELINE ?=
 BENCH_CANDIDATE ?=
 BENCH_TARGETS ?=
@@ -173,7 +180,7 @@ endef
 	llvm-dev llvm-sanitizers rtsan \
 	fuzz-build fuzz-binary-file fuzz-decode-one fuzz-differential-decode fuzz-replay \
 	fuzz-compiler-schema fuzz-compiler-pipeline fuzz-compiler-compile fuzz-smoke \
-	bench-smoke bench-run bench-compare \
+	bench-smoke bench-correctness bench-run bench-validate bench-redact-log bench-compare \
 	release-assets release-assets-check install install-runtime \
 	lint format-check format-changed tidy linux-smoke \
 	clean clobber
@@ -276,6 +283,8 @@ variables: ## Show the most useful Makefile overrides
 		'FUZZ_SECONDS' '$(FUZZ_SECONDS)' \
 		'BENCH_LABEL' '$(BENCH_LABEL)' \
 		'BENCH_SOURCE_ID' '$(BENCH_SOURCE_ID)' \
+		'BENCH_COOLDOWN_SECONDS' '$(BENCH_COOLDOWN_SECONDS)' \
+		'BENCH_EVIDENCE_DIR' '$(BENCH_EVIDENCE_DIR)' \
 		'RELEASE_REVISION' '$(RELEASE_REVISION)' \
 		'RELEASE_OUTPUT_DIR' '$(RELEASE_OUTPUT_DIR)' \
 		'DOCKER_PLATFORM' '$(DOCKER_PLATFORM)'
@@ -523,6 +532,10 @@ fuzz-smoke: fuzz-build ## Run all seven bounded fuzz targets sequentially
 bench-smoke: ## Build and run the non-comparison benchmark smoke test
 	+@$(MAKE) --no-print-directory check PRESET=bench
 
+bench-correctness: ## Run the complete pre-timing correctness gates
+	+@$(MAKE) --no-print-directory dev
+	+@$(MAKE) --no-print-directory bench-smoke
+
 bench-run: ## Collect a frozen series; requires BENCH_LABEL and BENCH_SOURCE_ID
 	@set -eu; \
 	case "$(BENCH_LABEL)" in ''|*[!A-Za-z0-9._-]*) \
@@ -534,17 +547,56 @@ bench-run: ## Collect a frozen series; requires BENCH_LABEL and BENCH_SOURCE_ID
 	if test -d "$(BENCH_OUTPUT_DIR)" && test -n "$$(find "$(BENCH_OUTPUT_DIR)" -mindepth 1 -print -quit)"; then \
 		printf 'Benchmark output already exists: %s\n' "$(BENCH_OUTPUT_DIR)" >&2; exit 2; \
 	fi; \
+	if test -d "$(BENCH_EVIDENCE_DIR)" && test -n "$$(find "$(BENCH_EVIDENCE_DIR)" -mindepth 1 -print -quit)"; then \
+		printf 'Benchmark evidence already exists: %s\n' "$(BENCH_EVIDENCE_DIR)" >&2; exit 2; \
+	fi; \
 	if test "$(UNAME_S)" = Darwin; then \
+		command -v pmset >/dev/null 2>&1 || { printf 'pmset is required for macOS evidence.\n' >&2; exit 2; }; \
+		pmset -g batt | grep -Fq 'AC Power' || { \
+			printf 'Refusing benchmark timing without AC power.\n' >&2; exit 2; }; \
 		printf 'Note: macOS has no supported process-affinity control; preserve this caveat.\n'; \
 	fi
 	+@$(MAKE) --no-print-directory bench-smoke
-	@$(PYTHON) benchmarks/benchmark.py run \
+	@$(CMAKE) -E make_directory "$(BENCH_EVIDENCE_DIR)"
+	@set -eu; \
+	record_host() { \
+		date -u '+%Y-%m-%dT%H:%M:%SZ'; \
+		uname -a; \
+		if test "$(UNAME_S)" = Darwin; then \
+			pmset -g batt; pmset -g custom; pmset -g therm; \
+		fi; \
+	}; \
+	record_host > "$(BENCH_EVIDENCE_DIR)/host-before.txt"; \
+	rc=0; \
+	$(PYTHON) benchmarks/benchmark.py run \
 		--executable "$(BENCH_EXECUTABLE)" \
 		--output-dir "$(BENCH_OUTPUT_DIR)" \
 		--label "$(BENCH_LABEL)" \
 		--source-id "$(BENCH_SOURCE_ID)" \
-		--correctness-command "ctest --preset bench" \
-		--cwd "$(ROOT)"
+		--correctness-command "$(BENCH_CORRECTNESS_COMMAND)" \
+		--cooldown-seconds "$(BENCH_COOLDOWN_SECONDS)" \
+		--cwd "$(ROOT)" || rc=$$?; \
+	record_host > "$(BENCH_EVIDENCE_DIR)/host-after.txt"; \
+	exit "$$rc"
+	+@$(MAKE) --no-print-directory bench-validate
+	+@$(MAKE) --no-print-directory bench-redact-log
+
+bench-validate: ## Rebuild and validate a series from all raw run JSON files
+	@$(PYTHON) benchmarks/benchmark.py validate-series \
+		--series "$(BENCH_SERIES)" \
+		--runs-dir "$(BENCH_RUNS_DIR)"
+
+bench-redact-log: ## Create a separate privacy-reviewed public correctness log
+	@set -eu; \
+	test -f "$(BENCH_REDACT_INPUT)" || { printf 'Missing raw benchmark log: %s\n' "$(BENCH_REDACT_INPUT)" >&2; exit 2; }; \
+	if test "$(FORCE)" != 1 && test -e "$(BENCH_REDACT_OUTPUT)"; then \
+		printf 'Redacted log already exists: %s\n' "$(BENCH_REDACT_OUTPUT)" >&2; exit 2; \
+	fi; \
+	$(CMAKE) -E make_directory "$$(dirname "$(BENCH_REDACT_OUTPUT)")"
+	@$(PYTHON) benchmarks/benchmark.py redact-log \
+		--input "$(BENCH_REDACT_INPUT)" \
+		--output "$(BENCH_REDACT_OUTPUT)" \
+		--source-root "$(ROOT)"
 
 bench-compare: ## Compare explicit BENCH_BASELINE and BENCH_CANDIDATE series
 	@set -eu; \
@@ -690,7 +742,8 @@ clobber: ## Remove ignored build/ and out/ trees; requires CONFIRM=clobber
 		printf 'Refusing to remove symlinked output roots.\n' >&2; exit 2; }; \
 	for protected in \
 		"$(BUILD_ROOT)/bench/private-holdout" \
-		"$(BUILD_ROOT)/bench/results"; do \
+		"$(BUILD_ROOT)/bench/results" \
+		"$(OUT_ROOT)/benchmark-evidence"; do \
 		if test -e "$$protected" || test -L "$$protected"; then \
 			printf 'Refusing to remove protected benchmark data: %s\n' "$$protected" >&2; \
 			printf 'Relocate it deliberately before using clobber.\n' >&2; exit 2; \

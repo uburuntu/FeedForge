@@ -7,8 +7,8 @@ separately. They are related, but none is a substitute for another.
 ## Package versions
 
 FeedForge follows semantic versioning. Before 1.0, installed CMake packages use
-same-minor compatibility: a consumer requesting 0.4 will not silently accept
-0.5. Source compatibility may change between pre-1.0 minor releases and is
+same-minor compatibility: a consumer requesting 0.5 will not silently accept
+0.6. Source compatibility may change between pre-1.0 minor releases and is
 described in each release's notes.
 
 FeedForge does not promise a stable binary ABI. Rebuild consumers and generated
@@ -42,6 +42,10 @@ the preferred upgrade path.
   observable decode semantics.
 - Schema and pipeline fingerprints identify resolved input semantics, not file
   spelling or paths.
+- The benchmark contract is versioned independently. Contract 1.0.0 evidence
+  cannot be compared with contract 2.0.0 evidence.
+- The synthetic conformance bundle remains format version 1; its format is not
+  coupled to the FeedForge package minor version.
 
 Replay counters and offsets are `std::uint64_t`. Event field types remain
 determined by the schema-to-C++ mapping in [Generated C++ API](generated-api.md).

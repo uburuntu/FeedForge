@@ -21,7 +21,7 @@ correctness.
 
 ## Frozen evaluation method
 
-The procedure is defined by [benchmark contract 1.0.0](benchmarking.md). Its
+The procedure is defined by [benchmark contract 1.0.0](benchmarking-v1.md). Its
 workloads, correctness checks, metrics, and thresholds were fixed before the
 retained changes were judged.
 

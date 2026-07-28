@@ -190,7 +190,7 @@
       "configurePreset": "bench",
       "filter": {
         "include": {
-          "name": "^benchmark\\.smoke$"
+          "name": "^benchmark\\."
         }
       },
       "output": { "outputOnFailure": true }

@@ -70,6 +70,8 @@ byte.
 | RealtimeSanitizer smoke | `make rtsan` |
 | Seven bounded libFuzzer runs | `make fuzz-smoke` |
 | Benchmark harness smoke | `make bench-smoke` |
+| Pre-timing correctness gate | `make bench-correctness` |
+| Qualified benchmark series | `make bench-run BENCH_LABEL=... BENCH_SOURCE_ID=...` |
 | Deterministic release assets | `make release-assets-check` |
 | Local install | `make install` |
 | Runtime-only install | `make install-runtime` |
@@ -146,6 +148,8 @@ make release-assets \
 The command writes normalized `.tar.gz` and `.zip` source archives plus
 `SHA256SUMS`. Archive metadata identifies the resolved commit. The checksum file
 lists only the primary archives and intentionally does not hash itself.
+Benchmark observations use a separate `BENCHMARK_SHA256SUMS`; never add
+host-specific timing evidence to the deterministic source checksum file.
 
 ## LLVM and fuzzing
 
@@ -171,20 +175,40 @@ RSS monitor thread at shutdown. Linux retains leak detection.
 
 ## Benchmark discipline
 
-Smoke mode is always safe to run:
+Smoke mode is deterministic correctness validation. Hosted CI runs it but does
+not publish its timings:
 
 ```sh
 make bench-smoke
 ```
 
-Full series collection requires an explicit label and immutable source ID, and
-refuses a non-empty output directory:
+`bench-correctness` runs the full dev, conformance, generated-byte, and
+benchmark smoke gates. Full series collection requires an explicit label and
+the exact clean 40-character `HEAD`, refuses CI and non-empty output or evidence
+directories, and waits 120 seconds after correctness before timing:
 
 ```sh
 make bench-run \
-  BENCH_LABEL=candidate-01 \
-  BENCH_SOURCE_ID="$(git rev-parse HEAD)"
+  BENCH_LABEL=v0.6.0-qualified \
+  BENCH_SOURCE_ID="$(git rev-parse HEAD)" \
+  BENCH_COOLDOWN_SECONDS=120
 ```
+
+On macOS the target requires AC power. Preserve pre/post `pmset` power and
+thermal records in `BENCH_EVIDENCE_DIR`, then revalidate the aggregate against
+all seven raw runs:
+
+```sh
+python3 benchmarks/benchmark.py validate-series \
+  --series build/bench/results/v0.6.0-qualified/series.json \
+  --runs-dir build/bench/results/v0.6.0-qualified
+```
+
+Keep raw JSON and CSV unchanged. Build logs may contain usernames, checkout
+paths, or temporary paths; create a separate reviewed copy with
+`benchmark.py redact-log` before publication. Do not upload private holdout
+material, recursive build directories, credentials, proprietary data, or
+licensed captures.
 
 Comparison likewise requires explicit series paths and refuses to infer target
 IDs. Pass the predeclared targets, space-separated, in `BENCH_TARGETS`:
@@ -196,8 +220,9 @@ make bench-compare \
   BENCH_TARGETS='decode_one/itch50_all/all_types'
 ```
 
-The frozen workload, acceptance thresholds, holdout policy, and publication
-rules remain defined in [benchmarking.md](benchmarking.md).
+The frozen workload, acceptance thresholds, evidence files, privacy checks, and
+claim boundary remain defined in [benchmarking.md](benchmarking.md). The v0.6
+series is a new baseline, not an optimization or production-throughput claim.
 
 ## Editor integration
 

@@ -148,6 +148,21 @@ metadata, and extraction. Its C++ integration test consumes the generated
 payload and BinaryFILE files through both the independent oracle and generated
 decoder. No generated bundle or archive is committed.
 
+### Benchmark contract
+
+Benchmark contract 2.0.0 contains exactly 16 ordered synthetic cases: eight
+`decode_one` and strict replay cases retained from contract 1, plus eight
+chunked replay cases using frame-aligned and one-byte schedules. Before timing,
+every chunked result must equal strict replay in summary, counters, event order,
+and sink checksum.
+
+The bench preset is Release C++20 with IPO off. Its CTest surface runs the
+executable smoke and Python mutation tests. Hosted CI validates a relative-path
+smoke JSON artifact but does not retain or publish runner timing. Qualified
+local series require seven processes, 15 recorded samples, five warm-ups, a
+50 ms sample floor, a 120-second post-correctness cooldown, AC power, and the
+full evidence rules in [Benchmarking](benchmarking.md).
+
 ## Allocation, exceptions, and realtime checks
 
 `hardening.allocation` finishes input and sink setup, resets replacements for
@@ -268,6 +283,10 @@ cmake --build --preset no-exceptions-rtti
 ctest --preset no-exceptions-rtti
 
 ctest --test-dir build/dev -L allocation --output-on-failure
+
+cmake --preset bench
+cmake --build --preset bench
+ctest --preset bench
 ```
 
 Preset definitions are maintained in
@@ -290,7 +309,9 @@ The [main CI workflow](../.github/workflows/ci.yml) must cover:
 - Windows x64 Visual Studio 2022 full compiler/runtime coverage with native
   MSVC 19.38 or newer, plus a ClangCL compiler/generated portability gate;
 - a release-blocking s390x big-endian portability probe under QEMU, which is
-  emulation evidence rather than a physical-hardware support tier; and
+  emulation evidence rather than a physical-hardware support tier;
+- a release-blocking deterministic 16-case benchmark contract smoke with
+  Python 3.11 artifact validation, without publishing hosted timing; and
 - the separate [Linux fuzz-smoke workflow](../.github/workflows/fuzz-smoke.yml)
   for all seven libFuzzer targets, including a weekly five-minute campaign.
 
