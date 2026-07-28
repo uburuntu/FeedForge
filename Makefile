@@ -561,9 +561,10 @@ bench-run: ## Collect a frozen series; requires BENCH_LABEL and BENCH_SOURCE_ID
 	@set -eu; \
 	record_host() { \
 		date -u '+%Y-%m-%dT%H:%M:%SZ'; \
-		uname -a; \
+		uname -srvmp; \
 		if test "$(UNAME_S)" = Darwin; then \
-			pmset -g batt; pmset -g custom; pmset -g therm; \
+			pmset -g batt | sed -E 's/\(id=[0-9]+\)/(id=<redacted>)/'; \
+			pmset -g custom; pmset -g therm; \
 		fi; \
 	}; \
 	record_host > "$(BENCH_EVIDENCE_DIR)/host-before.txt"; \
