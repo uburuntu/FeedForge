@@ -146,14 +146,14 @@ endforeach()
 
 run_expected_failure(
   "mismatched exact package request"
-  "requested version \"1.0.1\""
+  "requested version \"1.0\""
   "${CMAKE_COMMAND}"
   -S "${CONSUMER_SOURCE_DIR}"
   -B "${WORK_DIR}/incompatible-exact-version-build"
   -G "${GENERATOR}"
   "-DCMAKE_CXX_COMPILER=${CXX_COMPILER}"
   "-DCMAKE_PREFIX_PATH=${_prefix}"
-  -DFEEDFORGE_REQUEST_VERSION=1.0.1
+  -DFEEDFORGE_REQUEST_VERSION=1.0
   -DFEEDFORGE_REQUEST_EXACT=ON
 )
 
