@@ -41,12 +41,13 @@ requires Automatic/legacy-off power mode 0 and records the pre/post battery
 source, power configuration, and thermal status. Endpoint snapshots do not
 prove uninterrupted AC power, and macOS lacks supported process affinity.
 
-The GitHub release carries reviewed individual raw JSON and CSV, aggregate
-series, redacted public correctness and qualification logs, pre/post host-state
-records, the benchmark executable hash, and `BENCHMARK_SHA256SUMS`. The normal
-`SHA256SUMS` continues to cover only the deterministic source `.tar.gz` and
-`.zip` archives. Private holdout material, recursive build trees, credentials,
-proprietary data, licensed captures, and unreviewed raw logs are excluded.
+The GitHub release carries reviewed individual raw JSON/CSV, capture-sanitized
+hash-bound human output, aggregate series, a redacted qualification log,
+pre/post host-state records, the benchmark executable hash, and
+`BENCHMARK_SHA256SUMS`. The normal `SHA256SUMS` continues to cover only the
+deterministic source `.tar.gz` and `.zip` archives. Private holdout material,
+recursive build trees, credentials, proprietary data, licensed captures, and
+unreviewed raw logs are excluded.
 
 No numeric timing value is committed to the source tree. The release evidence
 is content-addressed to the final v0.6.0 tag and retains its exact host,

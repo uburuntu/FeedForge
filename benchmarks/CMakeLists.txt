@@ -118,10 +118,26 @@ if(BUILD_TESTING)
     NAME benchmark.smoke
     COMMAND "$<TARGET_FILE:feedforge_benchmark>" --smoke
   )
+  if(NOT Python3_Interpreter_FOUND)
+    message(
+      FATAL_ERROR
+      "Benchmark contract tests require Python 3.11 or newer"
+    )
+  endif()
+  add_test(
+    NAME benchmark.contract_validation
+    COMMAND
+      "${Python3_EXECUTABLE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/benchmark_test.py"
+  )
   set_tests_properties(
-    benchmark.smoke
+    benchmark.smoke benchmark.contract_validation
     PROPERTIES
       LABELS benchmark
-      TIMEOUT 30
+      TIMEOUT 60
+  )
+  set_tests_properties(
+    benchmark.contract_validation
+    PROPERTIES WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
   )
 endif()

@@ -164,7 +164,8 @@ artifact with:
 
 ```sh
 python3 benchmarks/benchmark.py validate \
-  --artifact build/bench/benchmark-smoke.json
+  --artifact build/bench/benchmark-smoke.json \
+  --csv build/bench/benchmark-smoke.csv
 ```
 
 For a future same-contract optimization comparison, name every target
@@ -181,20 +182,22 @@ python3 benchmarks/benchmark.py compare \
 
 ## Evidence and privacy
 
-Preserve all seven raw `run-*.json`, `run-*.csv`, and `run-*.txt` files,
-`series.json`, `series.csv`, the exact executable hash, `correctness.txt`, the
-phase-one verification log, and pre/post power and thermal logs. Raw timing JSON
-and CSV must not be rewritten: changing them breaks the validator and evidence
-chain.
+Preserve all seven raw `run-*.json` and `run-*.csv` files, all seven
+capture-sanitized and hash-bound `run-*.txt` files, `series.json`, `series.csv`,
+the capture-sanitized and hash-bound `correctness.txt`, the exact executable
+hash, the phase-one verification log, and pre/post power and thermal logs. The
+portable validator requires the exact JSON, CSV, and text files; do not rewrite
+them.
 
-Build logs can contain usernames, checkout paths, temporary paths, environment
-details, or tool output that should not be published. Produce a reviewed public
-copy without altering the raw input:
+The runner mechanically strips known credential forms, usernames, checkout
+paths, temporary paths, and terminal controls before hashing human output. This
+is not exhaustive and does not replace manual review. Separately captured build
+logs, including the phase-one verification log, need a distinct public copy:
 
 ```sh
 python3 benchmarks/benchmark.py redact-log \
-  --input build/bench/results/v0.6.0-qualified/correctness.txt \
-  --output out/benchmark-evidence/v0.6.0/correctness.public.txt \
+  --input out/benchmark-local/v0.6.0/verify-all.txt \
+  --output out/benchmark-evidence/v0.6.0/verify-all.public.txt \
   --source-root "$(pwd)"
 ```
 

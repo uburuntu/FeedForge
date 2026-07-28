@@ -254,6 +254,23 @@ jobs:
         run: >-
           python3 -c
           'import sys; print(sys.version); assert sys.version_info[:2] == (3, 11)'
+      - name: Require a non-narrowable pre-timing correctness gate
+        run: |
+          make --no-print-directory -n bench-correctness \
+            CMAKE=true \
+            CMAKE_ARGS=-DFEEDFORGE_BUILD_TESTS=OFF \
+            BUILD_ARGS='--target help' \
+            CTEST=true \
+            CTEST_ARGS='-R one_test' \
+            >"${RUNNER_TEMP}/bench-correctness-dry-run.txt"
+          grep -F 'cmake --preset "dev"' "${RUNNER_TEMP}/bench-correctness-dry-run.txt"
+          grep -F 'ctest --preset "dev"' "${RUNNER_TEMP}/bench-correctness-dry-run.txt"
+          grep -F 'ctest --preset "bench"' "${RUNNER_TEMP}/bench-correctness-dry-run.txt"
+          if grep -E 'BUILD_TESTS=OFF|--target help|-R one_test' \
+              "${RUNNER_TEMP}/bench-correctness-dry-run.txt"; then
+            printf 'bench-correctness inherited a narrowing override\n' >&2
+            exit 1
+          fi
       - name: Configure Release C++20 benchmark surface with IPO disabled
         run: >-
           cmake --preset bench
@@ -273,6 +290,7 @@ jobs:
         run: >-
           python3 benchmarks/benchmark.py validate
           --artifact build/bench/benchmark-smoke.json
+          --csv build/bench/benchmark-smoke.csv
       - name: Require contract 2.0.0 and all 16 cases
         run: |
           python3 - <<'PY'

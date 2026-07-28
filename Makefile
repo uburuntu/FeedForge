@@ -95,8 +95,6 @@ BENCH_CORRECTNESS_COMMAND ?= make bench-correctness
 BENCH_SERIES ?= $(BENCH_OUTPUT_DIR)/series.json
 BENCH_RUNS_DIR ?= $(BENCH_OUTPUT_DIR)
 BENCH_EVIDENCE_DIR ?= $(OUT_ROOT)/benchmark-evidence/$(BENCH_LABEL)
-BENCH_REDACT_INPUT ?= $(BENCH_OUTPUT_DIR)/correctness.txt
-BENCH_REDACT_OUTPUT ?= $(BENCH_EVIDENCE_DIR)/correctness.public.txt
 BENCH_BASELINE ?=
 BENCH_CANDIDATE ?=
 BENCH_TARGETS ?=
@@ -180,7 +178,7 @@ endef
 	llvm-dev llvm-sanitizers rtsan \
 	fuzz-build fuzz-binary-file fuzz-decode-one fuzz-differential-decode fuzz-replay \
 	fuzz-compiler-schema fuzz-compiler-pipeline fuzz-compiler-compile fuzz-smoke \
-	bench-smoke bench-correctness bench-run bench-validate bench-redact-log bench-compare \
+	bench-smoke bench-correctness bench-run bench-validate bench-compare \
 	release-assets release-assets-check install install-runtime \
 	lint format-check format-changed tidy linux-smoke \
 	clean clobber
@@ -533,8 +531,13 @@ bench-smoke: ## Build and run the non-comparison benchmark smoke test
 	+@$(MAKE) --no-print-directory check PRESET=bench
 
 bench-correctness: ## Run the complete pre-timing correctness gates
-	+@$(MAKE) --no-print-directory dev
-	+@$(MAKE) --no-print-directory bench-smoke
+	# Keep caller-supplied Make overrides from narrowing the captured gate.
+	+@make --no-print-directory dev \
+		MAKE=make CMAKE=cmake CTEST=ctest PYTHON=python3 \
+		CMAKE_ARGS= BUILD_ARGS= CTEST_ARGS=
+	+@make --no-print-directory bench-smoke \
+		MAKE=make CMAKE=cmake CTEST=ctest PYTHON=python3 \
+		CMAKE_ARGS= BUILD_ARGS= CTEST_ARGS=
 
 bench-run: ## Collect a frozen series; requires BENCH_LABEL and BENCH_SOURCE_ID
 	@set -eu; \
@@ -623,26 +626,12 @@ bench-run: ## Collect a frozen series; requires BENCH_LABEL and BENCH_SOURCE_ID
 		printf 'Rejecting the complete timing attempt because host power state changed.\n' >&2; exit "$$post_rc"; \
 	}
 	+@$(MAKE) --no-print-directory bench-validate
-	+@$(MAKE) --no-print-directory bench-redact-log
 
 bench-validate: ## Rebuild and validate a series from all raw run JSON files
 	@$(PYTHON) benchmarks/benchmark.py validate-series \
 		--series "$(BENCH_SERIES)" \
 		--runs-dir "$(BENCH_RUNS_DIR)" \
 		--verify-checkout
-
-bench-redact-log: ## Create a separate privacy-reviewed public correctness log
-	@set -eu; \
-	test -f "$(BENCH_REDACT_INPUT)" || { printf 'Missing raw benchmark log: %s\n' "$(BENCH_REDACT_INPUT)" >&2; exit 2; }; \
-	if test "$(FORCE)" != 1 && test -e "$(BENCH_REDACT_OUTPUT)"; then \
-		printf 'Redacted log already exists: %s\n' "$(BENCH_REDACT_OUTPUT)" >&2; exit 2; \
-	fi; \
-	$(CMAKE) -E make_directory "$$(dirname "$(BENCH_REDACT_OUTPUT)")"
-	@$(PYTHON) benchmarks/benchmark.py redact-log \
-		--input "$(BENCH_REDACT_INPUT)" \
-		--output "$(BENCH_REDACT_OUTPUT)" \
-		--source-root "$(ROOT)"
-
 bench-compare: ## Compare explicit BENCH_BASELINE and BENCH_CANDIDATE series
 	@set -eu; \
 	test -f "$(BENCH_BASELINE)" || { printf 'Set BENCH_BASELINE to series.json.\n' >&2; exit 2; }; \

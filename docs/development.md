@@ -204,9 +204,10 @@ python3 benchmarks/benchmark.py validate-series \
   --runs-dir build/bench/results/v0.6.0-qualified
 ```
 
-Keep raw JSON and CSV unchanged. Build logs may contain usernames, checkout
-paths, or temporary paths; create a separate reviewed copy with
-`benchmark.py redact-log` before publication. Do not upload private holdout
+Keep raw JSON/CSV and the capture-sanitized, hash-bound text files unchanged so
+portable validation can rebuild the series. The mechanical log scrubber is not
+exhaustive; manually review every asset. Use `benchmark.py redact-log` for the
+separately captured full-verification log. Do not upload private holdout
 material, recursive build directories, credentials, proprietary data, or
 licensed captures.
 
