@@ -130,16 +130,31 @@ else()
   message(FATAL_ERROR "KIND must be canonical or generated")
 endif()
 
+foreach(_incompatible_version IN ITEMS 0.6 1.1 2)
+  run_expected_failure(
+    "incompatible package request ${_incompatible_version}"
+    "compatible with requested version \"${_incompatible_version}\""
+    "${CMAKE_COMMAND}"
+    -S "${CONSUMER_SOURCE_DIR}"
+    -B "${WORK_DIR}/incompatible-version-${_incompatible_version}-build"
+    -G "${GENERATOR}"
+    "-DCMAKE_CXX_COMPILER=${CXX_COMPILER}"
+    "-DCMAKE_PREFIX_PATH=${_prefix}"
+    "-DFEEDFORGE_REQUEST_VERSION=${_incompatible_version}"
+  )
+endforeach()
+
 run_expected_failure(
-  "pre-1.0 package request"
-  "compatible with requested version \"0.6\""
+  "mismatched exact package request"
+  "requested version \"1.0.1\""
   "${CMAKE_COMMAND}"
   -S "${CONSUMER_SOURCE_DIR}"
-  -B "${WORK_DIR}/incompatible-version-build"
+  -B "${WORK_DIR}/incompatible-exact-version-build"
   -G "${GENERATOR}"
   "-DCMAKE_CXX_COMPILER=${CXX_COMPILER}"
   "-DCMAKE_PREFIX_PATH=${_prefix}"
-  -DFEEDFORGE_REQUEST_VERSION=0.6
+  -DFEEDFORGE_REQUEST_VERSION=1.0.1
+  -DFEEDFORGE_REQUEST_EXACT=ON
 )
 
 foreach(_compatible_version IN ITEMS 1 1.0)
@@ -171,6 +186,21 @@ foreach(_compatible_version IN ITEMS 1 1.0)
     "${CMAKE_COMMAND}" ${_compatibility_configure_args}
   )
 endforeach()
+
+run_checked(
+  "${KIND} consumer configure with exact package version 1.0.0"
+  "${CMAKE_COMMAND}"
+  -S "${CONSUMER_SOURCE_DIR}"
+  -B "${WORK_DIR}/exact-version-1.0.0-build"
+  -G "${GENERATOR}"
+  "-DCMAKE_CXX_COMPILER=${CXX_COMPILER}"
+  -DCMAKE_CXX_STANDARD=20
+  -DCMAKE_CXX_EXTENSIONS=OFF
+  "-DCMAKE_PREFIX_PATH=${_prefix}"
+  -DFEEDFORGE_REQUEST_VERSION=1.0.0
+  -DFEEDFORGE_REQUEST_EXACT=ON
+  "-DFEEDFORGE_CONSUMER_KIND=${KIND}"
+)
 
 set(_consumer_build "${WORK_DIR}/consumer-build")
 set(_consumer_configure_args

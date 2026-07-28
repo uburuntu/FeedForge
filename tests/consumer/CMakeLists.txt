@@ -27,8 +27,15 @@ if(FEEDFORGE_CONSUMER_ACQUISITION STREQUAL "package")
     CACHE STRING
     "Optional FeedForge package version requested by compatibility tests"
   )
+  option(
+    FEEDFORGE_REQUEST_EXACT
+    "Require an exact FeedForge package version"
+    OFF
+  )
   if(FEEDFORGE_REQUEST_VERSION STREQUAL "")
     find_package(FeedForge CONFIG REQUIRED)
+  elseif(FEEDFORGE_REQUEST_EXACT)
+    find_package(FeedForge ${FEEDFORGE_REQUEST_VERSION} EXACT CONFIG REQUIRED)
   else()
     find_package(FeedForge ${FEEDFORGE_REQUEST_VERSION} CONFIG REQUIRED)
   endif()
