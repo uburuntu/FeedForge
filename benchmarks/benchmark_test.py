@@ -116,7 +116,7 @@ def make_run(
             "compiler_version": "21.0.0",
             "config_flags": "-O3 -DNDEBUG",
             "cxx_standard": 202002,
-            "feedforge_version": "0.6.0",
+            "feedforge_version": "1.0.0",
             "generator": "Ninja",
             "interprocedural_optimization": "OFF",
             "pipeline_fingerprints": copy.deepcopy(benchmark.PIPELINE_FINGERPRINTS),

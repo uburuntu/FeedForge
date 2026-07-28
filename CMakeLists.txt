@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.25)
 
 project(
   FeedForge
-  VERSION 0.6.0
+  VERSION 1.0.0
   DESCRIPTION "Ahead-of-time compiler for checked market-data decode pipelines"
   HOMEPAGE_URL "https://github.com/uburuntu/FeedForge"
   LANGUAGES CXX
@@ -362,7 +362,7 @@ configure_package_config_file(
 write_basic_package_version_file(
   "${CMAKE_CURRENT_BINARY_DIR}/FeedForgeConfigVersion.cmake"
   VERSION "${PROJECT_VERSION}"
-  COMPATIBILITY SameMinorVersion
+  COMPATIBILITY SameMajorVersion
 )
 
 install(

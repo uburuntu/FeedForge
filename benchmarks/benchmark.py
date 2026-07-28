@@ -698,8 +698,8 @@ def _validate_build(
     _revision(build.get("source_revision"), f"{path}: build.source_revision")
     if build.get("build_type") != "Release":
         raise ValueError(f"{path}: benchmark build is not Release")
-    if build.get("feedforge_version") != "0.6.0":
-        raise ValueError(f"{path}: benchmark executable is not FeedForge 0.6.0")
+    if build.get("feedforge_version") != "1.0.0":
+        raise ValueError(f"{path}: benchmark executable is not FeedForge 1.0.0")
     if build.get("interprocedural_optimization") != "OFF":
         raise ValueError(f"{path}: interprocedural optimization must be OFF")
     if build.get("schema_fingerprint") != SCHEMA_FINGERPRINT:

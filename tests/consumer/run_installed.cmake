@@ -131,16 +131,46 @@ else()
 endif()
 
 run_expected_failure(
-  "previous pre-1.0 minor package request"
-  "compatible with requested version \"0.5\""
+  "pre-1.0 package request"
+  "compatible with requested version \"0.6\""
   "${CMAKE_COMMAND}"
   -S "${CONSUMER_SOURCE_DIR}"
   -B "${WORK_DIR}/incompatible-version-build"
   -G "${GENERATOR}"
   "-DCMAKE_CXX_COMPILER=${CXX_COMPILER}"
   "-DCMAKE_PREFIX_PATH=${_prefix}"
-  -DFEEDFORGE_REQUEST_VERSION=0.5
+  -DFEEDFORGE_REQUEST_VERSION=0.6
 )
+
+foreach(_compatible_version IN ITEMS 1 1.0)
+  set(_compatibility_build
+      "${WORK_DIR}/compatible-version-${_compatible_version}-build")
+  set(
+    _compatibility_configure_args
+    -S "${CONSUMER_SOURCE_DIR}"
+    -B "${_compatibility_build}"
+    -G "${GENERATOR}"
+    "-DCMAKE_CXX_COMPILER=${CXX_COMPILER}"
+    -DCMAKE_CXX_STANDARD=20
+    -DCMAKE_CXX_EXTENSIONS=OFF
+    "-DCMAKE_PREFIX_PATH=${_prefix}"
+    "-DFEEDFORGE_REQUEST_VERSION=${_compatible_version}"
+    "-DFEEDFORGE_CONSUMER_KIND=${KIND}"
+  )
+  if(KIND STREQUAL "canonical")
+    list(
+      APPEND _compatibility_configure_args
+      -DFEEDFORGE_REQUIRE_COMPILER_ABSENT=ON
+    )
+  endif()
+  if(DEFINED CONFIG AND NOT CONFIG STREQUAL "")
+    list(APPEND _compatibility_configure_args "-DCMAKE_BUILD_TYPE=${CONFIG}")
+  endif()
+  run_checked(
+    "${KIND} consumer configure with package version ${_compatible_version}"
+    "${CMAKE_COMMAND}" ${_compatibility_configure_args}
+  )
+endforeach()
 
 set(_consumer_build "${WORK_DIR}/consumer-build")
 set(_consumer_configure_args
@@ -151,7 +181,7 @@ set(_consumer_configure_args
     -DCMAKE_CXX_STANDARD=20
     -DCMAKE_CXX_EXTENSIONS=OFF
     "-DCMAKE_PREFIX_PATH=${_prefix}"
-    -DFEEDFORGE_REQUEST_VERSION=0.6
+    -DFEEDFORGE_REQUEST_VERSION=1.0.0
     "-DFEEDFORGE_CONSUMER_KIND=${KIND}")
 if(KIND STREQUAL "canonical")
   list(
