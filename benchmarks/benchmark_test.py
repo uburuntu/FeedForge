@@ -11,6 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import tempfile
 import unittest
+from unittest import mock
 
 import benchmark
 
@@ -56,6 +57,8 @@ def make_run(
     batch: int = benchmark.QUALIFIED_BATCH,
     minimum_time_ms: float = benchmark.QUALIFIED_MIN_TIME_MS,
     smoke: bool = False,
+    run_name: str = "run-01",
+    output_directory: str = "build/bench/results/qualified",
 ) -> dict[str, object]:
     config = {
         "batch": batch,
@@ -96,14 +99,12 @@ def make_run(
         item["statistics"] = statistics
         item["quality"] = quality
         cases.append(item)
-    arguments = [
-        "build/bench/benchmarks/feedforge_benchmark",
-        "--samples",
-        str(samples),
+    executable = "build/bench/benchmarks/feedforge_benchmark"
+    arguments = benchmark._expected_benchmark_base(executable, config) + [
         "--json",
-        "build/bench/results/run-01.json",
+        f"{output_directory}/{run_name}.json",
         "--csv",
-        "build/bench/results/run-01.csv",
+        f"{output_directory}/{run_name}.csv",
     ]
     return {
         "benchmarks": cases,
@@ -172,6 +173,7 @@ def write_series(
     executable_sha256: str = EXECUTABLE_A,
     speed: float = 1.0,
     diagnostic_only: bool = False,
+    label: str = "qualified",
 ) -> dict[str, object]:
     directory.mkdir(parents=True, exist_ok=True)
     correctness_path = directory / "correctness.txt"
@@ -184,6 +186,7 @@ def write_series(
             source_id=source_id,
             run_offset=index * 1_000,
             speed=speed,
+            run_name=stem,
         )
         benchmark.canonical_json(directory / f"{stem}.json", run)
         benchmark.atomic_text(directory / f"{stem}.csv", raw_csv(run))
@@ -199,12 +202,10 @@ def write_series(
     series = benchmark.build_series(
         runs,
         records,
-        label="qualified",
-        command=[
-            "build/bench/benchmarks/feedforge_benchmark",
-            "--samples",
-            "15",
-        ],
+        label=label,
+        command=benchmark._expected_benchmark_base(
+            "build/bench/benchmarks/feedforge_benchmark", runs[0]["config"]
+        ),
         correctness=correctness,
         executable="build/bench/benchmarks/feedforge_benchmark",
         executable_sha256_before=executable_sha256,
@@ -334,6 +335,15 @@ class RunValidationTest(unittest.TestCase):
         )
         self.assert_invalid(absolute, "path must remain relative")
 
+        for executable in ("C:outside.exe", "."):
+            with self.subTest(executable=executable):
+                unsafe = copy.deepcopy(self.run)
+                unsafe["command"]["argv"][0] = executable
+                unsafe["command"]["joined"] = benchmark.join_command(
+                    unsafe["command"]["argv"]
+                )
+                self.assert_invalid(unsafe, "path must remain relative")
+
         joined = copy.deepcopy(self.run)
         joined["command"]["joined"] += " --forged"
         self.assert_invalid(joined, "does not match argv")
@@ -355,6 +365,34 @@ class RunValidationTest(unittest.TestCase):
         boolean_counter = copy.deepcopy(self.run)
         boolean_counter["benchmarks"][0]["samples"][0]["elapsed_ns"] = True
         self.assert_invalid(boolean_counter, "expected an integer")
+
+    def test_run_argv_is_frozen_and_bound_to_config(self) -> None:
+        changed = copy.deepcopy(self.run)
+        sample_value = changed["command"]["argv"].index("--samples") + 1
+        changed["command"]["argv"][sample_value] = "16"
+        changed["command"]["joined"] = benchmark.join_command(
+            changed["command"]["argv"]
+        )
+        self.assert_invalid(changed, "frozen canonical order")
+
+        removed = copy.deepcopy(self.run)
+        warmup = removed["command"]["argv"].index("--warmup")
+        del removed["command"]["argv"][warmup:warmup + 2]
+        removed["command"]["joined"] = benchmark.join_command(
+            removed["command"]["argv"]
+        )
+        self.assert_invalid(removed, "option set does not match config")
+
+        duplicate = copy.deepcopy(self.run)
+        duplicate["command"]["argv"].extend(["--batch", "256"])
+        duplicate["command"]["joined"] = benchmark.join_command(
+            duplicate["command"]["argv"]
+        )
+        self.assert_invalid(duplicate, "duplicate benchmark option --batch")
+
+        config_drift = copy.deepcopy(self.run)
+        config_drift["config"]["batch"] = 512
+        self.assert_invalid(config_drift, "frozen canonical order")
 
     def test_canonical_object_key_sets_reject_extensions(self) -> None:
         mutations = (
@@ -381,6 +419,26 @@ class RunValidationTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "non-finite JSON"):
                 benchmark.load_json(path)
 
+    def test_duplicate_json_keys_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "duplicate.json"
+            path.write_text(
+                '{"schema_version":1,"nested":{"id":1,"id":2}}\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "duplicate JSON key: id"):
+                benchmark.load_json(path)
+
+    def test_validate_artifact_rejects_a_symlink(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            target = directory / "target.json"
+            benchmark.canonical_json(target, self.run)
+            artifact = directory / "artifact.json"
+            artifact.symlink_to(target.name)
+            with self.assertRaisesRegex(ValueError, "symlinked JSON evidence"):
+                benchmark.validate_artifact(SimpleNamespace(artifact=artifact))
+
 
 class RawCsvValidationTest(unittest.TestCase):
     def test_valid_csv_and_mutated_projection(self) -> None:
@@ -404,6 +462,28 @@ class RawCsvValidationTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "extra or missing cells"):
                 benchmark.validate_raw_csv(path, run)
 
+    def test_validate_cli_checks_the_direct_csv_pair_and_rejects_a_symlink(self) -> None:
+        run = make_run()
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            artifact = directory / "run.json"
+            csv_path = directory / "run.csv"
+            benchmark.canonical_json(artifact, run)
+            benchmark.atomic_text(csv_path, raw_csv(run))
+            self.assertEqual(
+                benchmark.validate_artifact(
+                    SimpleNamespace(artifact=artifact, csv=csv_path)
+                ),
+                0,
+            )
+            target = directory / "csv-target.csv"
+            csv_path.rename(target)
+            csv_path.symlink_to(target.name)
+            with self.assertRaisesRegex(ValueError, "symlinked CSV evidence"):
+                benchmark.validate_artifact(
+                    SimpleNamespace(artifact=artifact, csv=csv_path)
+                )
+
 
 class SeriesValidationTest(unittest.TestCase):
     def test_valid_series_rebuilds_from_all_raw_runs(self) -> None:
@@ -426,6 +506,7 @@ class SeriesValidationTest(unittest.TestCase):
                     series=directory / "series.json",
                     runs_dir=directory,
                     verify_checkout=False,
+                    cwd=Path.cwd(),
                 )
             )
             self.assertEqual(result, 0)
@@ -434,6 +515,32 @@ class SeriesValidationTest(unittest.TestCase):
                     directory / "series.json", directory,
                     verify_current_checkout=True,
                 )
+
+    def test_explicit_checkout_root_is_used_for_local_verification(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "checkout"
+            executable = root / "build/bench/benchmarks/feedforge_benchmark"
+            executable.parent.mkdir(parents=True)
+            executable.write_bytes(b"frozen executable")
+            directory = root / "evidence"
+            write_series(
+                directory,
+                executable_sha256=benchmark.sha256_file(executable),
+            )
+            with (
+                mock.patch.object(
+                    benchmark, "repository_root", return_value=root
+                ) as repository_root,
+                mock.patch.object(benchmark, "verify_checkout") as verify_checkout,
+            ):
+                benchmark.validate_series_path(
+                    directory / "series.json",
+                    directory,
+                    verify_current_checkout=True,
+                    checkout_root=root,
+                )
+            repository_root.assert_called_once_with(root)
+            verify_checkout.assert_called_once_with(root, SOURCE_A)
 
     def test_portable_validation_requires_hash_bound_sanitized_logs(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -464,6 +571,70 @@ class SeriesValidationTest(unittest.TestCase):
                 benchmark.validate_series_path(
                     directory / "series.json", directory,
                     verify_current_checkout=False,
+                )
+
+    def test_raw_command_is_bound_to_series_and_exact_artifact_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            series = write_series(directory)
+            path = directory / "run-01.json"
+            run = benchmark.load_json(path)
+            json_value = run["command"]["argv"].index("--json") + 1
+            csv_value = run["command"]["argv"].index("--csv") + 1
+            run["command"]["argv"][json_value] = (
+                "build/bench/results/qualified/run-99.json"
+            )
+            run["command"]["argv"][csv_value] = (
+                "build/bench/results/qualified/run-99.csv"
+            )
+            run["command"]["joined"] = benchmark.join_command(
+                run["command"]["argv"]
+            )
+            benchmark.canonical_json(path, run)
+            series["run_files"][0]["json_sha256"] = benchmark.sha256_file(path)
+            benchmark.canonical_json(directory / "series.json", series)
+            with self.assertRaisesRegex(ValueError, "series/raw paths"):
+                benchmark.validate_series_path(
+                    directory / "series.json", directory,
+                    verify_current_checkout=False,
+                )
+
+    def test_duplicate_series_keys_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            write_series(directory)
+            path = directory / "series.json"
+            contents = path.read_text(encoding="utf-8").rstrip()
+            benchmark.atomic_text(path, contents[:-1] + ',"schema_version":1}\n')
+            with self.assertRaisesRegex(ValueError, "duplicate JSON key: schema_version"):
+                benchmark.validate_series_path(
+                    path, directory, verify_current_checkout=False
+                )
+
+    def test_symlinked_evidence_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            write_series(directory)
+            raw = directory / "run-01.json"
+            target = directory / "raw-target.json"
+            raw.rename(target)
+            raw.symlink_to(target.name)
+            with self.assertRaisesRegex(ValueError, "symlinked evidence"):
+                benchmark.validate_series_path(
+                    directory / "series.json", directory,
+                    verify_current_checkout=False,
+                )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            write_series(directory)
+            series = directory / "series.json"
+            target = directory / "series-target.json"
+            series.rename(target)
+            series.symlink_to(target.name)
+            with self.assertRaisesRegex(ValueError, "must not be a symlink"):
+                benchmark.validate_series_path(
+                    series, directory, verify_current_checkout=False
                 )
 
         with tempfile.TemporaryDirectory() as temporary:
@@ -506,6 +677,17 @@ class SeriesValidationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             series = write_series(directory)
+            series["identity"] = None
+            benchmark.canonical_json(directory / "series.json", series)
+            with self.assertRaisesRegex(ValueError, "identity: expected an object"):
+                benchmark.validate_series_path(
+                    directory / "series.json", directory,
+                    verify_current_checkout=False,
+                )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            series = write_series(directory)
             series["unexpected_extension"] = True
             benchmark.canonical_json(directory / "series.json", series)
             with self.assertRaisesRegex(ValueError, "top-level series fields changed"):
@@ -537,8 +719,10 @@ class SeriesValidationTest(unittest.TestCase):
             self.assertTrue(validated["diagnostic_only"])
 
     def test_frozen_cooldown_and_correctness_command_gate_readiness(self) -> None:
-        run = make_run()
-        runs = [copy.deepcopy(run) for _ in range(benchmark.QUALIFIED_REPEATS)]
+        runs = [
+            make_run(run_name=f"run-{index:02d}")
+            for index in range(1, benchmark.QUALIFIED_REPEATS + 1)
+        ]
         records = [
             {
                 "json": f"run-{index:02d}.json", "json_sha256": "1" * 64,
@@ -549,12 +733,14 @@ class SeriesValidationTest(unittest.TestCase):
         ]
         series = benchmark.build_series(
             runs, records, label="bad-cooldown",
-            command=["build/feedforge_benchmark"],
+            command=benchmark._expected_benchmark_base(
+                "build/bench/benchmarks/feedforge_benchmark", runs[0]["config"]
+            ),
             correctness={
                 "command": ["ctest"], "exit_code": 0,
                 "log": "correctness.txt", "log_sha256": "4" * 64,
             },
-            executable="build/feedforge_benchmark",
+            executable="build/bench/benchmarks/feedforge_benchmark",
             executable_sha256_before=EXECUTABLE_A,
             executable_sha256_after=EXECUTABLE_A,
             source_id=SOURCE_A,
@@ -566,6 +752,23 @@ class SeriesValidationTest(unittest.TestCase):
         self.assertFalse(
             series["qualification"]["checks"]["correctness_command_exact"]
         )
+
+    def test_correctness_environment_removes_make_overrides(self) -> None:
+        environment = {
+            "PATH": "/usr/bin",
+            "CUSTOM": "preserved",
+            "MAKEFLAGS": "-n CTEST=true",
+            "MFLAGS": "-n",
+            "GNUMAKEFLAGS": "-n",
+            "MAKEFILES": "/tmp/injected.mk",
+            "CTEST": "true",
+            "CTEST_ARGS": "-R one-test",
+            "CMAKE_ARGS": "-DBUILD_TESTING=OFF",
+            "PRESET": "fast",
+        }
+        sanitized = benchmark._correctness_environment(environment)
+        self.assertEqual(sanitized, {"PATH": "/usr/bin", "CUSTOM": "preserved"})
+        self.assertIn("MAKEFLAGS", environment)
 
 
 class ComparisonTest(unittest.TestCase):
@@ -583,19 +786,32 @@ class ComparisonTest(unittest.TestCase):
             root = Path(temporary)
             baseline_dir = root / "baseline"
             candidate_dir = root / "candidate"
-            write_series(baseline_dir, source_id=SOURCE_A, executable_sha256=EXECUTABLE_A)
+            write_series(
+                baseline_dir,
+                source_id=SOURCE_A,
+                executable_sha256=EXECUTABLE_A,
+                label="baseline-label",
+            )
             write_series(
                 candidate_dir,
                 source_id=SOURCE_B,
                 executable_sha256=EXECUTABLE_B,
                 speed=0.90,
+                label="candidate-label",
             )
-            result = benchmark.compare_series(
-                self.arguments(
-                    baseline_dir / "series.json", candidate_dir / "series.json"
-                )
+            arguments = self.arguments(
+                baseline_dir / "series.json", candidate_dir / "series.json"
             )
+            arguments.output_json = root / "comparison.json"
+            result = benchmark.compare_series(arguments)
             self.assertEqual(result, 0)
+            comparison = benchmark.load_json(arguments.output_json)
+            self.assertEqual(comparison["baseline"], f"baseline-label@{SOURCE_A}")
+            self.assertEqual(comparison["candidate"], f"candidate-label@{SOURCE_B}")
+            self.assertEqual(comparison["baseline_file"], "series.json")
+            self.assertEqual(comparison["candidate_file"], "series.json")
+            self.assertEqual(comparison["baseline_label"], "baseline-label")
+            self.assertEqual(comparison["candidate_label"], "candidate-label")
 
             with (baseline_dir / "run-01.json").open("a", encoding="utf-8") as output:
                 output.write(" \n")
@@ -667,7 +883,13 @@ class RedactionTest(unittest.TestCase):
             original = (
                 f"build: {root}/build/dev/output.txt\n"
                 f"home: {Path.home()}/private.txt\n"
+                "foreign mac: /Users/another-user/project/output.txt\n"
+                "foreign linux: /home/another-user/project/output.txt\n"
                 "temp: /private/tmp/feedforge/repro.txt\n"
+                "\x1b]0;private terminal title\x07"
+                "\x9dc1 private terminal title\x9c"
+                "\x9b31mc1 color\x9b0m\n"
+                "control:\x00hidden\x1ftext\n"
                 f"token={secret}\n"
                 f"fine={fine_grained}\n"
                 f"Authorization: Bearer {jwt}\n"
@@ -690,11 +912,38 @@ class RedactionTest(unittest.TestCase):
             self.assertNotIn(fine_grained, public)
             self.assertNotIn(jwt, public)
             self.assertNotIn("c2Vuc2l0aXZlLWtleS1tYXRlcmlhbA", public)
+            self.assertNotIn("another-user", public)
+            self.assertNotIn("private terminal title", public)
+            self.assertNotIn("c1 private terminal title", public)
+            self.assertNotIn("\x00", public)
+            self.assertNotIn("\x1f", public)
+            self.assertNotIn("\x9b", public)
+            self.assertNotIn("\x9d", public)
+            self.assertNotIn("\x9c", public)
             self.assertNotIn(str(root), public)
             with self.assertRaisesRegex(ValueError, "refusing to overwrite"):
                 benchmark.redact_log(
                     SimpleNamespace(input=source, output=output, source_root=root)
                 )
+
+    def test_redact_log_self_validates_before_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            source = directory / "raw.txt"
+            output = directory / "public.txt"
+            benchmark.atomic_text(source, "ordinary log\n")
+            with mock.patch.object(
+                benchmark, "redact_text", return_value="/home/leaked/secret\n"
+            ):
+                with self.assertRaisesRegex(ValueError, "user home path"):
+                    benchmark.redact_log(
+                        SimpleNamespace(
+                            input=source,
+                            output=output,
+                            source_root=directory,
+                        )
+                    )
+            self.assertFalse(output.exists())
 
 
 if __name__ == "__main__":

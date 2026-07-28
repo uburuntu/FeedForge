@@ -11,7 +11,7 @@ import io
 import json
 import math
 import os
-from pathlib import Path, PureWindowsPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 import re
 import shlex
 import subprocess
@@ -31,6 +31,29 @@ QUALIFIED_BATCH = 256
 QUALIFIED_MIN_TIME_MS = 50.0
 QUALIFIED_COOLDOWN_SECONDS = 120
 FROZEN_CORRECTNESS_COMMAND = ["make", "bench-correctness"]
+CORRECTNESS_ENVIRONMENT_BLOCKLIST = frozenset(
+    {
+        "BUILD_ARGS",
+        "CMAKE",
+        "CMAKE_ARGS",
+        "CMAKE_BUILD",
+        "CTEST",
+        "CTEST_ARGS",
+        "GENERATE_PRESET",
+        "GIT",
+        "GNUMAKEFLAGS",
+        "MAKE",
+        "MAKEFILES",
+        "MAKEFLAGS",
+        "MAKELEVEL",
+        "MAKEOVERRIDES",
+        "MFLAGS",
+        "PARALLEL",
+        "PRESET",
+        "PYTHON",
+        "SHELL",
+    }
+)
 MIN_MEDIAN_IMPROVEMENT = 0.05
 MAX_CROSS_RUN_NORMALIZED_MAD = 0.03
 MIN_ROBUST_MARGIN = 0.03
@@ -82,12 +105,20 @@ HOST_KEYS = {
 }
 COMMAND_KEYS = {"argv", "joined", "working_directory"}
 SERIES_KEYS = {
-    "benchmarks", "command", "comparison_ready", "contract_version",
+    "benchmarks", "command", "command_output_directory", "comparison_ready", "contract_version",
     "cooldown_seconds", "correctness", "diagnostic_only", "executable",
     "executable_sha256", "executable_sha256_after", "executable_sha256_before",
     "identity", "label", "qualification", "repeat_count", "run_files",
     "schema_version", "source_id", "source_root", "thresholds", "timestamp_utc",
     "warnings",
+}
+IDENTITY_KEYS = {
+    "benchmarks", "build", "config", "contract_version", "corpus_sha256",
+    "correctness", "host", "schema_version",
+}
+IDENTITY_CONFIG_KEYS = {
+    "batch", "clock", "clock_is_steady", "minimum_time_ms", "samples", "smoke",
+    "warmup",
 }
 FROZEN_REVIEWER = "independent-line-by-line-protocol-review"
 FROZEN_REVIEW_STATUS = "approved"
@@ -292,15 +323,32 @@ def _reject_json_constant(value: str) -> None:
     raise ValueError(f"non-finite JSON number: {value}")
 
 
+def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
 def load_json(path: Path) -> dict[str, Any]:
+    if path.is_symlink():
+        raise ValueError(f"{path}: symlinked JSON evidence is forbidden")
     with path.open("r", encoding="utf-8") as source:
-        value = json.load(source, parse_constant=_reject_json_constant)
+        value = json.load(
+            source,
+            parse_constant=_reject_json_constant,
+            object_pairs_hook=_reject_duplicate_json_keys,
+        )
     if not isinstance(value, dict):
         raise ValueError(f"{path} does not contain a JSON object")
     return value
 
 
 def sha256_file(path: Path) -> str:
+    if path.is_symlink():
+        raise ValueError(f"{path}: symlinked evidence is forbidden")
     digest = hashlib.sha256()
     with path.open("rb") as source:
         for block in iter(lambda: source.read(1024 * 1024), b""):
@@ -359,11 +407,20 @@ def _close(actual: Any, expected: float, context: str) -> None:
         raise ValueError(f"{context}: {value!r} does not match derived {expected!r}")
 
 
-def _safe_relative(value: Any, context: str) -> str:
+def _safe_relative(
+    value: Any, context: str, *, allow_current_directory: bool = False
+) -> str:
     if not isinstance(value, str) or not value or "\\" in value:
         raise ValueError(f"{context}: expected a nonempty POSIX relative path")
     path = Path(value)
-    if path.is_absolute() or PureWindowsPath(value).is_absolute() or ".." in path.parts:
+    windows_path = PureWindowsPath(value)
+    if (
+        path.is_absolute()
+        or windows_path.is_absolute()
+        or windows_path.drive
+        or ".." in path.parts
+        or (path.as_posix() == "." and not allow_current_directory)
+    ):
         raise ValueError(f"{context}: path must remain relative and contained")
     return path.as_posix()
 
@@ -377,6 +434,87 @@ def join_command(arguments: Sequence[str]) -> str:
         else:
             output.append("'" + argument.replace("'", "'\\''") + "'")
     return " ".join(output)
+
+
+def _expected_benchmark_base(
+    executable: str, config: dict[str, Any]
+) -> list[str]:
+    if config["smoke"]:
+        if (
+            config["samples"] != 3
+            or config["warmup"] != 1
+            or config["batch"] != 1
+            or config["minimum_time_ms"] != 2
+        ):
+            raise ValueError("smoke argv does not match the frozen smoke config")
+        return [executable, "--smoke"]
+    return [
+        executable,
+        "--samples",
+        str(config["samples"]),
+        "--warmup",
+        str(config["warmup"]),
+        "--batch",
+        str(config["batch"]),
+        "--min-time-ms",
+        format(config["minimum_time_ms"], "g"),
+    ]
+
+
+def _parse_benchmark_argv(
+    arguments: Sequence[str], config: dict[str, Any], context: str
+) -> dict[str, Any]:
+    if not arguments or any(not isinstance(item, str) or not item for item in arguments):
+        raise ValueError(f"{context}: command argv is empty or malformed")
+    executable = _safe_relative(arguments[0], f"{context}: argv[0]")
+    value_options = {
+        "--samples", "--warmup", "--batch", "--min-time-ms", "--json", "--csv"
+    }
+    seen: dict[str, str | bool] = {}
+    index = 1
+    while index < len(arguments):
+        option = arguments[index]
+        if option in seen:
+            raise ValueError(f"{context}: duplicate benchmark option {option}")
+        if option == "--smoke":
+            seen[option] = True
+            index += 1
+            continue
+        if option not in value_options:
+            raise ValueError(f"{context}: unknown benchmark option {option}")
+        if index + 1 >= len(arguments):
+            raise ValueError(f"{context}: {option} requires a value")
+        seen[option] = arguments[index + 1]
+        index += 2
+
+    expected_options = (
+        {"--smoke", "--json", "--csv"}
+        if config["smoke"]
+        else value_options
+    )
+    if set(seen) != expected_options:
+        raise ValueError(f"{context}: benchmark option set does not match config")
+    json_path = _safe_relative(seen["--json"], f"{context}: --json")
+    csv_path = _safe_relative(seen["--csv"], f"{context}: --csv")
+    json_pure = PurePosixPath(json_path)
+    csv_pure = PurePosixPath(csv_path)
+    if (
+        json_pure.suffix != ".json"
+        or csv_pure.suffix != ".csv"
+        or json_pure.parent != csv_pure.parent
+        or json_pure.stem != csv_pure.stem
+    ):
+        raise ValueError(f"{context}: JSON and CSV command paths do not form one run pair")
+    base = _expected_benchmark_base(executable, config)
+    expected = base + ["--json", json_path, "--csv", csv_path]
+    if list(arguments) != expected:
+        raise ValueError(f"{context}: benchmark argv is not in frozen canonical order")
+    return {
+        "base": base,
+        "csv": csv_path,
+        "json": json_path,
+        "output_directory": json_pure.parent.as_posix(),
+    }
 
 
 def _utc_timestamp(value: Any, context: str) -> str:
@@ -616,22 +754,20 @@ def _validate_corpus(corpus_value: Any, path: Path) -> None:
             raise ValueError(f"{path}: frozen fixture {index} review metadata changed")
 
 
-def _validate_command(command_value: Any, path: Path) -> None:
+def _validate_command(
+    command_value: Any, config: dict[str, Any], path: Path
+) -> dict[str, Any]:
     command = _mapping(command_value, f"{path}: command")
     if set(command) != COMMAND_KEYS:
         raise ValueError(f"{path}: command fields changed")
     arguments = _sequence(command.get("argv"), f"{path}: command.argv")
-    if not arguments or any(not isinstance(item, str) or not item for item in arguments):
-        raise ValueError(f"{path}: command argv is empty or malformed")
     if command.get("working_directory") != ".":
         raise ValueError(f"{path}: benchmark working directory must be relative '.'")
     if not isinstance(command.get("joined"), str) or not command["joined"]:
         raise ValueError(f"{path}: joined benchmark command is missing")
     if command["joined"] != join_command(arguments):
         raise ValueError(f"{path}: joined benchmark command does not match argv")
-    for index, argument in enumerate(arguments):
-        if index == 0 or (index > 0 and arguments[index - 1] in {"--json", "--csv"}):
-            _safe_relative(argument, f"{path}: command argv[{index}]")
+    return _parse_benchmark_argv(arguments, config, f"{path}: command")
 
 
 def validate_run(
@@ -672,7 +808,7 @@ def validate_run(
     )
     if timer_resolution > 100_000.0:
         raise ValueError(f"{path}: steady-clock resolution is too coarse")
-    _validate_command(run.get("command"), path)
+    _validate_command(run.get("command"), config, path)
     host = _mapping(run.get("host"), f"{path}: host")
     if set(host) != HOST_KEYS:
         raise ValueError(f"{path}: host fields changed")
@@ -866,6 +1002,8 @@ def _raw_csv_expected(run: dict[str, Any], item: dict[str, Any]) -> dict[str, An
 
 
 def validate_raw_csv(path: Path, run: dict[str, Any]) -> None:
+    if path.is_symlink():
+        raise ValueError(f"{path}: symlinked CSV evidence is forbidden")
     with path.open("r", encoding="utf-8", newline="") as source:
         reader = csv.DictReader(source)
         if tuple(reader.fieldnames or ()) != RAW_CSV_FIELDS:
@@ -952,6 +1090,10 @@ def _thresholds() -> dict[str, Any]:
     }
 
 
+def _command_artifact_path(directory: str, name: str) -> str:
+    return name if directory == "." else f"{directory}/{name}"
+
+
 def build_series(
     runs: list[dict[str, Any]],
     raw_runs: list[dict[str, str]],
@@ -975,6 +1117,29 @@ def build_series(
             raise ValueError(
                 f"run {index} changed corpus, correctness, build, host, config, or cases"
             )
+
+    if len(raw_runs) != len(runs):
+        raise ValueError("raw run descriptors do not match the loaded run count")
+    command_output_directory: str | None = None
+    for index, (run, record) in enumerate(zip(runs, raw_runs), start=1):
+        parsed = _parse_benchmark_argv(
+            run["command"]["argv"], run["config"], f"run {index} command"
+        )
+        if parsed["base"] != command:
+            raise ValueError(f"run {index} command does not match the series base command")
+        if command_output_directory is None:
+            command_output_directory = parsed["output_directory"]
+        elif parsed["output_directory"] != command_output_directory:
+            raise ValueError(f"run {index} command output directory changed")
+        expected_json = _command_artifact_path(
+            command_output_directory, record["json"]
+        )
+        expected_csv = _command_artifact_path(
+            command_output_directory, record["csv"]
+        )
+        if parsed["json"] != expected_json or parsed["csv"] != expected_csv:
+            raise ValueError(f"run {index} command paths do not match its raw files")
+    assert command_output_directory is not None
 
     aggregate = []
     warnings: list[str] = []
@@ -1070,6 +1235,7 @@ def build_series(
     return {
         "benchmarks": aggregate,
         "command": command,
+        "command_output_directory": command_output_directory,
         "comparison_ready": qualified,
         "contract_version": CONTRACT_VERSION,
         "cooldown_seconds": cooldown_seconds,
@@ -1129,6 +1295,15 @@ def _resolve_from_root(value: Path, root: Path) -> Path:
     return value.resolve() if value.is_absolute() else (root / value).resolve()
 
 
+def _correctness_environment(
+    environment: dict[str, str] | None = None,
+) -> dict[str, str]:
+    sanitized = dict(os.environ if environment is None else environment)
+    for name in CORRECTNESS_ENVIRONMENT_BLOCKLIST:
+        sanitized.pop(name, None)
+    return sanitized
+
+
 def _raw_record(output_dir: Path, stem: str) -> dict[str, str]:
     result: dict[str, str] = {}
     for kind, suffix in (("json", ".json"), ("csv", ".csv"), ("log", ".txt")):
@@ -1182,6 +1357,7 @@ def run_series(args: argparse.Namespace) -> int:
     completed = subprocess.run(
         correctness_command,
         cwd=root,
+        env=_correctness_environment(),
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -1265,7 +1441,10 @@ def run_series(args: argparse.Namespace) -> int:
     canonical_json(output_dir / "series.json", series)
     atomic_text(output_dir / "series.csv", series_csv(series))
     validate_series_path(
-        output_dir / "series.json", output_dir, verify_current_checkout=True
+        output_dir / "series.json",
+        output_dir,
+        verify_current_checkout=True,
+        checkout_root=root,
     )
     print()
     print(
@@ -1329,9 +1508,51 @@ def _verify_series_shape(series: dict[str, Any], path: Path) -> None:
     if not command or any(not isinstance(value, str) or not value for value in command):
         raise ValueError(f"{path}: series command is malformed")
     _safe_relative(command[0], f"{path}: command executable")
+    command_output_directory = _safe_relative(
+        series.get("command_output_directory"),
+        f"{path}: command_output_directory",
+        allow_current_directory=True,
+    )
+    if command_output_directory != series["command_output_directory"]:
+        raise ValueError(f"{path}: command output directory is not canonical")
+    identity = _mapping(series.get("identity"), f"{path}: identity")
+    if set(identity) != IDENTITY_KEYS:
+        raise ValueError(f"{path}: identity fields changed")
+    identity_config = _mapping(identity.get("config"), f"{path}: identity.config")
+    if set(identity_config) != IDENTITY_CONFIG_KEYS:
+        raise ValueError(f"{path}: identity config fields changed")
+    for name in ("batch", "samples", "warmup"):
+        _integer(
+            identity_config.get(name),
+            f"{path}: identity.config.{name}",
+            minimum=1,
+        )
+    _number(
+        identity_config.get("minimum_time_ms"),
+        f"{path}: identity.config.minimum_time_ms",
+        positive=True,
+    )
+    _boolean(identity_config.get("smoke"), f"{path}: identity.config.smoke")
+    expected_base = _expected_benchmark_base(
+        series["executable"], identity_config
+    )
+    if command != expected_base:
+        raise ValueError(f"{path}: series command does not match identity config")
     if series.get("thresholds") != _thresholds():
         raise ValueError(f"{path}: frozen series thresholds changed")
     _utc_timestamp(series.get("timestamp_utc"), f"{path}: timestamp_utc")
+
+
+def _direct_evidence_file(directory: Path, name: str, context: str) -> Path:
+    candidate = directory / name
+    if candidate.is_symlink():
+        raise ValueError(f"{context}: symlinked evidence is forbidden")
+    if not candidate.is_file():
+        raise ValueError(f"{context}: evidence file is missing")
+    resolved = candidate.resolve(strict=True)
+    if resolved.parent != directory or resolved != candidate:
+        raise ValueError(f"{context}: evidence file is not directly contained")
+    return candidate
 
 
 def validate_series_path(
@@ -1339,11 +1560,24 @@ def validate_series_path(
     runs_dir: Path,
     *,
     verify_current_checkout: bool,
+    checkout_root: Path | None = None,
 ) -> dict[str, Any]:
-    series_path = series_path.resolve()
-    runs_dir = runs_dir.resolve()
-    if series_path.parent != runs_dir:
+    lexical_series = Path(os.path.abspath(series_path))
+    lexical_runs_dir = Path(os.path.abspath(runs_dir))
+    if lexical_runs_dir.is_symlink():
+        raise ValueError("--runs-dir must not be a symlink")
+    if not lexical_runs_dir.is_dir():
+        raise ValueError("--runs-dir is not a directory")
+    if lexical_series.is_symlink():
+        raise ValueError("--series must not be a symlink")
+    if not lexical_series.is_file():
+        raise ValueError("--series is not a file")
+    if lexical_series.parent != lexical_runs_dir:
         raise ValueError("--series must be directly inside --runs-dir")
+    runs_dir = lexical_runs_dir.resolve(strict=True)
+    series_path = lexical_series.resolve(strict=True)
+    if series_path.parent != runs_dir:
+        raise ValueError("--series is not directly contained in --runs-dir")
     series = load_json(series_path)
     _verify_series_shape(series, series_path)
     records_value = _sequence(series.get("run_files"), f"{series_path}: run_files")
@@ -1370,9 +1604,11 @@ def validate_series_path(
     runs: list[dict[str, Any]] = []
     for record in records:
         for kind in ("json", "csv", "log"):
-            artifact = runs_dir / record[kind]
-            if not artifact.is_file():
-                raise ValueError(f"missing raw benchmark artifact: {artifact}")
+            artifact = _direct_evidence_file(
+                runs_dir,
+                record[kind],
+                f"{series_path}: run {record['json']} {kind}",
+            )
             if sha256_file(artifact) != record[f"{kind}_sha256"]:
                 raise ValueError(f"raw benchmark artifact hash changed: {artifact}")
         _validate_publishable_log(runs_dir / record["log"])
@@ -1384,6 +1620,18 @@ def validate_series_path(
             expected_source_id=series["source_id"],
             require_clean_source=True,
         )
+        expected_argv = series["command"] + [
+            "--json",
+            _command_artifact_path(
+                series["command_output_directory"], record["json"]
+            ),
+            "--csv",
+            _command_artifact_path(
+                series["command_output_directory"], record["csv"]
+            ),
+        ]
+        if run["command"]["argv"] != expected_argv:
+            raise ValueError(f"{json_path}: command does not match series/raw paths")
         validate_raw_csv(runs_dir / record["csv"], run)
         runs.append(run)
 
@@ -1395,8 +1643,10 @@ def validate_series_path(
     if correctness.get("exit_code") != 0 or correctness.get("log") != "correctness.txt":
         raise ValueError(f"{series_path}: correctness command did not pass")
     _sha256(correctness.get("log_sha256"), f"{series_path}: correctness log hash")
-    correctness_path = runs_dir / "correctness.txt"
-    if not correctness_path.is_file() or sha256_file(correctness_path) != correctness["log_sha256"]:
+    correctness_path = _direct_evidence_file(
+        runs_dir, "correctness.txt", f"{series_path}: correctness log"
+    )
+    if sha256_file(correctness_path) != correctness["log_sha256"]:
         raise ValueError(f"{series_path}: correctness log is missing or changed")
     _validate_publishable_log(correctness_path)
 
@@ -1416,14 +1666,14 @@ def validate_series_path(
     )
     if rebuilt != series:
         raise ValueError(f"{series_path}: aggregate does not rebuild from raw runs")
-    series_csv_path = runs_dir / "series.csv"
-    if not series_csv_path.is_file():
-        raise ValueError(f"{series_path}: series.csv is missing")
+    series_csv_path = _direct_evidence_file(
+        runs_dir, "series.csv", f"{series_path}: series.csv"
+    )
     if series_csv_path.read_text(encoding="utf-8") != series_csv(series):
         raise ValueError(f"{series_path}: series.csv does not match rebuilt aggregate")
 
     if verify_current_checkout:
-        root = repository_root(Path.cwd())
+        root = repository_root(checkout_root or Path.cwd())
         verify_checkout(root, series["source_id"])
         executable = root / series["executable"]
         if not executable.is_file():
@@ -1435,7 +1685,10 @@ def validate_series_path(
 
 def validate_series_command(args: argparse.Namespace) -> int:
     series = validate_series_path(
-        args.series, args.runs_dir, verify_current_checkout=args.verify_checkout
+        args.series,
+        args.runs_dir,
+        verify_current_checkout=args.verify_checkout,
+        checkout_root=args.cwd,
     )
     print(
         f"validated {series['repeat_count']} raw runs; "
@@ -1445,10 +1698,20 @@ def validate_series_command(args: argparse.Namespace) -> int:
 
 
 def validate_artifact(args: argparse.Namespace) -> int:
-    path = args.artifact.resolve()
+    path = Path(os.path.abspath(args.artifact))
     run = load_json(path)
     validate_run(run, path)
-    print(f"validated benchmark contract {CONTRACT_VERSION}: {path}")
+    csv_argument = getattr(args, "csv", None)
+    if csv_argument is not None:
+        csv_path = Path(os.path.abspath(csv_argument))
+        if csv_path.parent != path.parent or csv_path.stem != path.stem:
+            raise ValueError("--csv must be the direct sibling of --artifact with one stem")
+        validate_raw_csv(csv_path, run)
+        print(
+            f"validated benchmark contract {CONTRACT_VERSION}: {path} and {csv_path}"
+        )
+    else:
+        print(f"validated benchmark contract {CONTRACT_VERSION}: {path}")
     return 0
 
 
@@ -1501,13 +1764,9 @@ def comparison_csv(comparison: dict[str, Any]) -> str:
     return stream.getvalue()
 
 
-def _relative_display(path: Path) -> str:
-    return Path(os.path.relpath(path.resolve(), Path.cwd().resolve())).as_posix()
-
-
 def compare_series(args: argparse.Namespace) -> int:
-    baseline_path = args.baseline.resolve()
-    candidate_path = args.candidate.resolve()
+    baseline_path = Path(os.path.abspath(args.baseline))
+    candidate_path = Path(os.path.abspath(args.candidate))
     baseline = validate_series_path(
         baseline_path, baseline_path.parent, verify_current_checkout=False
     )
@@ -1586,12 +1845,16 @@ def compare_series(args: argparse.Namespace) -> int:
         )
     optimization_win = all_targets_pass and all_regressions_pass
     comparison = {
-        "baseline": _relative_display(baseline_path),
+        "baseline": f"{baseline['label']}@{baseline['source_id']}",
         "baseline_executable_sha256": baseline["executable_sha256"],
+        "baseline_file": baseline_path.name,
+        "baseline_label": baseline["label"],
         "baseline_source_id": baseline["source_id"],
         "benchmarks": rows,
-        "candidate": _relative_display(candidate_path),
+        "candidate": f"{candidate['label']}@{candidate['source_id']}",
         "candidate_executable_sha256": candidate["executable_sha256"],
+        "candidate_file": candidate_path.name,
+        "candidate_label": candidate["label"],
         "candidate_source_id": candidate["source_id"],
         "correctness_equivalent": True,
         "optimization_win": optimization_win,
@@ -1618,7 +1881,9 @@ def compare_series(args: argparse.Namespace) -> int:
     return 0 if optimization_win else 1
 
 
-_ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+_ANSI_RE = re.compile(r"(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]")
+_OSC_RE = re.compile(r"(?:\x1b\]|\x9d).*?(?:\x07|\x1b\\|\x9c)", re.DOTALL)
+_CONTROL_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
 _SECRET_LITERAL_PATTERNS = (
     re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{20,}\b"),
     re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b"),
@@ -1644,21 +1909,27 @@ _WINDOWS_HOME_RE = re.compile(r"(?i)[A-Z]:\\Users\\[^\\\s]+")
 _UNIX_HOME_RE = re.compile(r"/(?:Users|home)/[^/\s]+")
 
 
-def _validate_publishable_log(path: Path) -> None:
-    contents = path.read_text(encoding="utf-8", errors="replace")
-    if _ANSI_RE.search(contents):
-        raise ValueError(f"{path}: log still contains terminal control sequences")
+def _validate_publishable_text(contents: str, context: str) -> None:
+    if _ANSI_RE.search(contents) or _OSC_RE.search(contents) or _CONTROL_RE.search(contents):
+        raise ValueError(f"{context}: log still contains terminal control sequences")
     if _TEMP_PATH_RE.search(contents) or _WINDOWS_HOME_RE.search(contents):
-        raise ValueError(f"{path}: log still contains a sensitive absolute path")
+        raise ValueError(f"{context}: log still contains a sensitive absolute path")
     if _UNIX_HOME_RE.search(contents):
-        raise ValueError(f"{path}: log still contains a user home path")
+        raise ValueError(f"{context}: log still contains a user home path")
     sentinel_root = Path("/__feedforge_redaction_source_root_sentinel__")
     if redact_text(contents, sentinel_root) != contents:
-        raise ValueError(f"{path}: log still contains credential-like text")
+        raise ValueError(f"{context}: log still contains credential-like text")
+
+
+def _validate_publishable_log(path: Path) -> None:
+    contents = path.read_text(encoding="utf-8", errors="replace")
+    _validate_publishable_text(contents, str(path))
 
 
 def redact_text(text: str, source_root: Path) -> str:
-    redacted = _ANSI_RE.sub("", text)
+    redacted = _OSC_RE.sub("", text)
+    redacted = _ANSI_RE.sub("", redacted)
+    redacted = _CONTROL_RE.sub("", redacted)
     replacements = {
         str(source_root): "<SOURCE_ROOT>",
         source_root.as_posix(): "<SOURCE_ROOT>",
@@ -1674,6 +1945,7 @@ def redact_text(text: str, source_root: Path) -> str:
         redacted = redacted.replace(value, replacements[value])
         redacted = redacted.replace(value.replace("/", "\\"), replacements[value])
     redacted = _WINDOWS_HOME_RE.sub("<HOME>", redacted)
+    redacted = _UNIX_HOME_RE.sub("<HOME>", redacted)
     redacted = _TEMP_PATH_RE.sub("<TEMP_PATH>", redacted)
     redacted = _PRIVATE_KEY_RE.sub("<REDACTED PRIVATE KEY>", redacted)
     redacted = _AUTHORIZATION_RE.sub(
@@ -1706,7 +1978,9 @@ def redact_log(args: argparse.Namespace) -> int:
         "# FeedForge benchmark log: mechanically redacted copy\n"
         "# Mechanical checks are not exhaustive; review manually before publication.\n"
     )
-    atomic_text(output, header + redacted)
+    public_contents = header + redacted
+    _validate_publishable_text(public_contents, str(output))
+    atomic_text(output, public_contents)
     print(f"redacted log: {output}")
     return 0
 
@@ -1747,6 +2021,7 @@ def make_parser() -> argparse.ArgumentParser:
         "validate", help="validate one raw benchmark artifact"
     )
     validate_parser.add_argument("--artifact", required=True, type=Path)
+    validate_parser.add_argument("--csv", type=Path)
     validate_parser.set_defaults(function=validate_artifact)
 
     series_parser = subparsers.add_parser(
@@ -1754,6 +2029,7 @@ def make_parser() -> argparse.ArgumentParser:
     )
     series_parser.add_argument("--series", required=True, type=Path)
     series_parser.add_argument("--runs-dir", required=True, type=Path)
+    series_parser.add_argument("--cwd", type=Path, default=Path.cwd())
     series_parser.add_argument(
         "--verify-checkout",
         action="store_true",
