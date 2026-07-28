@@ -13,9 +13,10 @@ pipelines. Its scope is deliberately narrow: compile a declarative
 Nasdaq TotalView-ITCH 5.0 projection into strict C++20, then replay Nasdaq
 BinaryFILE data through a statically bound sink.
 
-FeedForge v0.6.0 is an **offline checked decoder**, not a feed handler or trading
-platform. It is experimental, is not exchange-certified, and is not production
-trading infrastructure.
+FeedForge 1.0.0 is an **offline checked decoder**, not a feed handler or trading
+platform. The 1.0 designation establishes documented source, CMake, and CLI
+compatibility; it does not mean exchange certification or suitability as
+production trading infrastructure.
 
 ## From schema to decoded events
 
@@ -87,7 +88,7 @@ environment limits, content IDs, and the redacted holdout conclusion.
 
 ## Scope
 
-FeedForge v0.6 provides:
+FeedForge 1.0 provides:
 
 - a header-only C++20 runtime exposed as `FeedForge::runtime`;
 - a C++23 host compiler exposed as `FeedForge::compiler`;
@@ -101,13 +102,15 @@ FeedForge v0.6 provides:
 - a validated local vcpkg overlay plus deterministic synthetic conformance
   bundle tooling for portable integration checks;
 - benchmark contract 2.0.0, with deterministic correctness smoke for 16
-  one-shot and chunked-replay cases plus content-addressed evidence tooling; and
-- allocation-free FeedForge-owned work on the per-message decode path.
+  one-shot and chunked-replay cases plus content-addressed evidence tooling;
+- allocation-free FeedForge-owned work on the per-message decode path; and
+- a documented 1.x compatibility policy for public C++ source, CMake consumers,
+  and compiler CLI automation, without a binary ABI promise.
 
 | Surface | Contract |
 |---|---|
 | Runtime and generated code | Strict C++20; GCC 11 or Clang 14 minimum |
-| Host compiler | C++23; GCC 13.2, Clang 17, or MSVC 19.38 (Visual Studio 2022 17.8), with a matching standard library |
+| Host compiler | Required C++23 features; native MSVC 19.38 configure bound; CI-qualified on current GCC, Clang 18 with libc++ 18, macOS 15 AppleClang, and Windows 2022 MSVC/ClangCL |
 | Platform policy | Linux x86-64 Tier 1; macOS arm64 and Windows x64 Tier 2; emulated s390x big-endian probe |
 | Protocol scope | Nasdaq TotalView-ITCH 5.0 over in-memory BinaryFILE |
 | Delivery | Statically bound typed sinks with explicit stop/error outcomes |
@@ -119,10 +122,12 @@ limits.
 
 ## Requirements
 
-- CMake 3.25 or newer;
+- CMake 3.25 or newer (3.25.3 is exercised in minimum runtime jobs);
 - Ninja for the shared project presets;
-- a C++20 compiler for the runtime and generated code; and
-- a supported C++23 compiler and standard library when building `feedforgec`.
+- GCC 11, Clang 14, or a compatible C++20 compiler and standard library for the
+  runtime and generated code; and
+- a CI-qualified C++23 compiler and standard library when building
+  `feedforgec`.
 
 Python 3.11 or newer is required only for synthetic conformance bundle and
 benchmark artifact generation or verification.
@@ -144,9 +149,10 @@ make quick
 
 Use `make dev` for the full Debug suite and generated-byte check, `make release`
 for an optimized build, `make sanitizers` for ASan+UBSan, and `make fuzz-smoke`
-for bounded local libFuzzer runs. The wrapper delegates to the shared CMake
-presets; direct CMake commands remain documented in
-[the development workflow](docs/development.md).
+for bounded local libFuzzer runs. `make compiler-exceptions` repeats the full
+suite and generated-byte check with the exception-enabled toml++ ABI. The
+wrapper delegates to the shared CMake presets; direct CMake commands remain
+documented in [the development workflow](docs/development.md).
 
 To configure only the C++20 runtime without requiring a C++23 host toolchain:
 
@@ -227,7 +233,7 @@ runtime-only install configured with `FEEDFORGE_BUILD_COMPILER=OFF`; this path
 requires neither C++23 nor toml++. Custom generation requires an install that
 contains `FeedForge::compiler`.
 
-FeedForge v0.6 processes caller-provided Nasdaq BinaryFILE byte spans only. It
+FeedForge 1.0 processes caller-provided Nasdaq BinaryFILE byte spans only. It
 does not provide live networking, recovery, order-book reconstruction, exchange
 certification, or production-trading guarantees.
 
@@ -250,7 +256,7 @@ certification, or production-trading guarantees.
 - [v0.6 benchmark evaluation](docs/v0.6-benchmark-evaluation.md)
 - [Performance case study](docs/performance-case-study.md)
 - [Schema audit](docs/schema-audit.md)
-- [v0.6.0 release notes](RELEASE_NOTES.md)
+- [v1.0.0 release notes](RELEASE_NOTES.md)
 
 ## Contributing and security
 

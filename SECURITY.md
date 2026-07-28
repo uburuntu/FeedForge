@@ -4,16 +4,19 @@
 
 | Version | Supported |
 |---|---|
-| 0.6.x | Yes |
+| 1.x | Yes |
+| 0.6.x | No |
 | 0.5.x | No |
 | 0.4.x | No |
 | 0.3.x | No |
 | 0.2.x | No |
 | 0.1.x | No |
 
-FeedForge is experimental software. Support means that reports are evaluated
-and fixes may be issued; it does not imply exchange certification or suitability
-for production trading.
+Support means that reports are evaluated and fixes may be issued. It does not
+imply a stable binary ABI, exchange certification, or suitability for production
+trading. Security fixes issued in 1.x follow the documented source, CMake, and
+CLI compatibility policy. An unavoidable break to those surfaces requires a
+new package major version and an explicit migration notice.
 
 ## Reporting a vulnerability
 

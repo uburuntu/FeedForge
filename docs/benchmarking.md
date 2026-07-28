@@ -92,14 +92,23 @@ per-message timing gate fails. A run is noisy if within-run MAD/median exceeds
 5% or the p95-p05 span exceeds 20% of median. These are rejection rules, not
 permission to remove individual samples.
 
-## v0.6 baseline qualification
+## Contract 2 series qualification
 
-The v0.6 evaluation is a new contract baseline, not an optimization comparison.
-It has no absolute speed threshold. Cross-case or cross-schedule ratios are
-descriptive only because operations and push counts differ. No result may be
-described as an optimization win, feed latency, or production throughput.
+The retained v0.6 evaluation is the first contract 2 baseline, not an
+optimization comparison. Its evidence remains bound to the v0.6 release and
+must not be relabeled as v1 evidence. It has no absolute speed threshold.
+Cross-case or cross-schedule ratios are descriptive only because operations and
+push counts differ. No result may be described as an optimization win, feed
+latency, or production throughput.
 
-Qualification has two phases:
+These rules also govern any fresh series collected from a later package. A v1
+series is separate evidence bound to its exact v1 source and executable. The
+v1.0 release does not require a timing series and makes no new numeric timing
+claim; do not publish or cite one unless it was actually collected, validated,
+reviewed, and attached to that release. Deterministic benchmark smoke remains a
+release correctness gate without creating a performance claim.
+
+Qualification of a timing series has two phases:
 
 1. At the exact candidate SHA, run `make verify-all` and preserve its complete
    log. This covers the portable matrix, sanitizers, seven fuzzers, generated
@@ -140,11 +149,12 @@ Build and run the deterministic, non-timing smoke checks:
 make bench-smoke
 ```
 
-After phase-one verification and host cooldown, collect the exact candidate:
+To collect optional fresh v1 evidence, complete phase-one verification and host
+cooldown, then collect the exact candidate:
 
 ```sh
 make bench-run \
-  BENCH_LABEL=v0.6.0-qualified \
+  BENCH_LABEL=v1.0.0-qualified \
   BENCH_SOURCE_ID="$(git rev-parse HEAD)" \
   BENCH_COOLDOWN_SECONDS=120
 ```
@@ -154,8 +164,8 @@ only its aggregate:
 
 ```sh
 python3 benchmarks/benchmark.py validate-series \
-  --series build/bench/results/v0.6.0-qualified/series.json \
-  --runs-dir build/bench/results/v0.6.0-qualified
+  --series build/bench/results/v1.0.0-qualified/series.json \
+  --runs-dir build/bench/results/v1.0.0-qualified
 ```
 
 The validator reloads every raw run, checks their paths and hashes, reconstructs
@@ -196,8 +206,8 @@ logs, including the phase-one verification log, need a distinct public copy:
 
 ```sh
 python3 benchmarks/benchmark.py redact-log \
-  --input out/benchmark-local/v0.6.0/verify-all.txt \
-  --output out/benchmark-evidence/v0.6.0/verify-all.public.txt \
+  --input out/benchmark-local/v1.0.0/verify-all.txt \
+  --output out/benchmark-evidence/v1.0.0/verify-all.public.txt \
   --source-root "$(pwd)"
 ```
 
@@ -212,8 +222,10 @@ session-specific even when its captured bytes are content-addressed. Download
 all assets after publication, verify both checksum manifests, and compare every
 downloaded byte with the local staged asset.
 
-No generated timing data is committed. The committed v0.6 evaluation guide
-defines the method and claim boundary; the release assets carry the observed
-series. Current deliberate limitations include no hardware counters, cache
-flushing, real-feed frequency model, thread-contention model, or macOS affinity
-control.
+No generated timing data is committed. The
+[v0.6 evaluation guide](v0.6-benchmark-evaluation.md) and its release assets
+retain the observed baseline series. This contract document defines the method
+and claim boundary for any later fresh evidence; it does not claim that such a
+series exists. Current deliberate limitations include no hardware counters,
+cache flushing, real-feed frequency model, thread-contention model, or macOS
+affinity control.

@@ -1,8 +1,9 @@
 # Testing
 
 This guide defines how FeedForge tests protocol conformance, generated code,
-runtime behavior, packaging, and supported platforms. FeedForge is experimental,
-is not exchange-certified, and is not production trading infrastructure.
+runtime behavior, packaging, and supported platforms. FeedForge 1.0 has a
+documented compatibility policy, but remains neither exchange-certified nor
+production trading infrastructure.
 
 A test result applies only to the exact source revision, configuration,
 toolchain, and platform that produced it. The presence of a preset, fixture
@@ -294,20 +295,54 @@ Preset definitions are maintained in
 generated sources in CI. Hosted CI is correctness infrastructure and must not
 publish latency or throughput claims.
 
+## 1.0 release gate
+
+The 1.0 release gate applies to one clean candidate commit and includes:
+
+- the full Debug and Release compiler/runtime suites with warnings as errors and
+  the default non-throwing toml++ ABI, plus the complete suite and generated
+  check with `FEEDFORGE_TOML_EXCEPTIONS=ON`;
+- Clang ASan+UBSan for the full applicable suite, the separate C++20
+  no-exceptions/no-RTTI runtime gate, allocation checks, and all seven
+  deterministic standalone arbitrary-input tests;
+- all seven libFuzzer targets under ASan+UBSan with the exact campaign duration,
+  corpus revision, executions, and absence or presence of artifacts recorded;
+- byte-identical canonical regeneration, Python conformance and benchmark
+  contract mutation tests, and deterministic source-archive reproduction;
+- both runtime and compiler consumers through the pinned real vcpkg overlay;
+- configure, build, CTest, install, and external CMake consumption from a clean
+  extraction of each deterministic source archive; and
+- release-blocking hosted `C++ security analysis`, `CI required`, and
+  `Fuzz required` results attached to the exact candidate SHA.
+
+Passing the no-exceptions runtime target does not establish compiler coverage.
+The normal and sanitizer compiler suites use `FEEDFORGE_TOML_EXCEPTIONS=OFF`;
+the distinct `compiler-exceptions` suite repeats the full compiler/runtime and
+generated-byte gates with it set to `ON`. The frontend, validation, lowering,
+emission, CLI, and atomic-output tests must pass in the applicable compiler
+configurations. Likewise, standalone arbitrary-input tests do not replace
+libFuzzer campaigns, and an in-tree install test does not replace the clean
+archive consumer.
+
 ## CI and platform policy
 
 The [main CI workflow](../.github/workflows/ci.yml) must cover:
 
+- CMake 3.25.3 configure, build, CTest, install, and external consumption in the
+  minimum runtime/generated jobs;
 - minimum supported GCC and Clang C++20 runtime and generated-code builds with
   the host compiler disabled;
 - supported GCC and Clang full builds, including generated-code C++23
   compatibility;
+- a full current-GCC compiler/runtime and generated-byte check with the
+  exception-enabled toml++ ABI;
 - Clang ASan and UBSan, no-exception and no-RTTI, release-mode, installed
   generation, and optional RTSan checks;
 - Linux x86-64 Tier 1 and full compiler/runtime coverage on macOS arm64
   AppleClang Tier 2;
-- Windows x64 Visual Studio 2022 full compiler/runtime coverage with native
-  MSVC 19.38 or newer, plus a ClangCL compiler/generated portability gate;
+- Windows x64 Visual Studio 2022 full compiler/runtime coverage with the MSVC
+  toolset supplied by the Windows 2022 image, plus a ClangCL
+  compiler/generated portability gate;
 - a release-blocking s390x big-endian portability probe under QEMU, which is
   emulation evidence rather than a physical-hardware support tier;
 - a release-blocking deterministic 16-case benchmark contract smoke with
