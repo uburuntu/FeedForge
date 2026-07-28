@@ -65,7 +65,6 @@ if(NOT TARGET tomlplusplus::tomlplusplus)
     GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
     GIT_TAG 30172438cee64926dc41fdd9c11fb3ba5b2ba9de
     SYSTEM
-    EXCLUDE_FROM_ALL
   )
   FetchContent_MakeAvailable(tomlplusplus)
 endif()

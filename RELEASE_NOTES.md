@@ -82,11 +82,12 @@ explicit 19.38 configure rejection bound, but exact 19.38 is not a
 release-matrix job.
 
 CMake 3.25 is the declared configuration floor. Minimum runtime/generated jobs
-pin CMake 3.25.3 through configure, build, CTest, install, and an external
-consumer; compiler-enabled and non-Linux jobs use their runner-provided CMake.
-Shared presets require Ninja. Python 3.11 or newer is required only for
-conformance-bundle, benchmark, and release artifact tooling. The core runtime
-has no external runtime dependency.
+pin CMake 3.25.2 through configure, build, CTest, install, and an external
+consumer. A full exception-enabled compiler job also pins 3.25.2 through the
+project build, CTest, and canonical generated-byte check. Other platform jobs
+use their runner-provided CMake. Shared presets require Ninja. Python 3.11 or
+newer is required only for conformance-bundle, benchmark, and release artifact
+tooling. The core runtime has no external runtime dependency.
 
 ## Qualification
 

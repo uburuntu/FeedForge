@@ -328,8 +328,8 @@ archive consumer.
 
 The [main CI workflow](../.github/workflows/ci.yml) must cover:
 
-- CMake 3.25.3 configure, build, CTest, install, and external consumption in the
-  minimum runtime/generated jobs;
+- CMake 3.25.2 in the minimum runtime/generated install-consumer jobs and the
+  full exception-enabled compiler/runtime/generated-byte job;
 - minimum supported GCC and Clang C++20 runtime and generated-code builds with
   the host compiler disabled;
 - supported GCC and Clang full builds, including generated-code C++23

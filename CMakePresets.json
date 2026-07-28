@@ -62,6 +62,14 @@
       }
     },
     {
+      "name": "compiler-exceptions",
+      "displayName": "Exception-enabled compiler ABI",
+      "inherits": "dev",
+      "cacheVariables": {
+        "FEEDFORGE_TOML_EXCEPTIONS": "ON"
+      }
+    },
+    {
       "name": "compiler-off",
       "displayName": "C++20 runtime and committed headers",
       "inherits": "base",
@@ -127,6 +135,7 @@
     { "name": "dev", "configurePreset": "dev" },
     { "name": "release", "configurePreset": "release" },
     { "name": "sanitizers", "configurePreset": "sanitizers" },
+    { "name": "compiler-exceptions", "configurePreset": "compiler-exceptions" },
     { "name": "compiler-off", "configurePreset": "compiler-off" },
     {
       "name": "no-exceptions-rtti",
@@ -168,6 +177,11 @@
     {
       "name": "sanitizers",
       "configurePreset": "sanitizers",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "compiler-exceptions",
+      "configurePreset": "compiler-exceptions",
       "output": { "outputOnFailure": true }
     },
     {

@@ -53,10 +53,10 @@ optional arguments may be added.
 This promise applies to documented CMake behavior, not generated build-system
 internals, build-tree paths, private target properties, or the developer
 `Makefile`. CMake 3.25 is the declared configuration floor. Linux minimum
-runtime/generated jobs pin CMake 3.25.3 and exercise configure, build, CTest,
-install, and an external canonical-header consumer. The compiler-enabled matrix
-uses runner-provided CMake, so the pinned floor evidence does not establish
-every compiler-on, platform, or generator combination at 3.25.3.
+runtime/generated jobs pin CMake 3.25.2 and exercise configure, build, CTest,
+install, and an external canonical-header consumer. The full exception-enabled
+compiler job also pins 3.25.2 through build, CTest, and canonical regeneration.
+Other platform and generator combinations use runner-provided CMake.
 
 ## Compiler CLI compatibility
 

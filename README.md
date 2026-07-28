@@ -122,7 +122,8 @@ limits.
 
 ## Requirements
 
-- CMake 3.25 or newer (3.25.3 is exercised in minimum runtime jobs);
+- CMake 3.25 or newer (3.25.2 is exercised with runtime-only and full compiler
+  configurations);
 - Ninja for the shared project presets;
 - GCC 11, Clang 14, or a compatible C++20 compiler and standard library for the
   runtime and generated code; and

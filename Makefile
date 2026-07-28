@@ -170,7 +170,7 @@ endef
 
 .PHONY: \
 	help doctor status presets variables \
-	configure build test check quick dev release sanitizers compiler-off no-exceptions-rtti \
+	configure build test check quick dev release sanitizers compiler-exceptions compiler-off no-exceptions-rtti \
 	verify verify-all \
 	test-allocation test-arbitrary-input test-installed \
 	conformance-bundle generated-check generated-refresh compiler validate pipeline-compile pipeline-ir \
@@ -322,6 +322,10 @@ sanitizers: ## Run the shared Clang ASan+UBSan preset
 	@ASAN_OPTIONS="$(ASAN_OPTIONS)" UBSAN_OPTIONS="$(UBSAN_OPTIONS)" \
 		$(CTEST) --preset sanitizers $(CTEST_ARGS)
 
+compiler-exceptions: ## Run the full compiler suite with the exception-enabled toml++ ABI
+	+@$(MAKE) --no-print-directory check PRESET=compiler-exceptions
+	+@$(MAKE) --no-print-directory generated-check GENERATE_PRESET=compiler-exceptions
+
 compiler-off: ## Validate strict C++20 runtime and committed headers without feedforgec
 	+@$(MAKE) --no-print-directory check PRESET=compiler-off
 
@@ -333,6 +337,7 @@ verify: ## Run the complete portable local correctness matrix (not hosted CI)
 	+@$(MAKE) --no-print-directory quick
 	+@$(MAKE) --no-print-directory dev
 	+@$(MAKE) --no-print-directory release
+	+@$(MAKE) --no-print-directory compiler-exceptions
 	+@$(MAKE) --no-print-directory compiler-off
 	+@$(MAKE) --no-print-directory no-exceptions-rtti
 	+@$(MAKE) --no-print-directory sanitizers
