@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dependency-free FeedForge benchmark repeat runner and comparator."""
+"""Validate, collect, and compare FeedForge benchmark contract evidence."""
 
 from __future__ import annotations
 
@@ -7,31 +7,176 @@ import argparse
 import csv
 import datetime as dt
 import hashlib
+import io
 import json
 import math
 import os
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
+import re
 import shlex
 import subprocess
 import sys
 import tempfile
-from typing import Any, Iterable
+import time
+from typing import Any, Iterable, Sequence
 
 
-MIN_REPEATS = 7
-MIN_SAMPLES = 11
-MIN_SAMPLE_TIME_MS = 50.0
+CONTRACT_VERSION = "2.0.0"
+RESULT_SCHEMA_VERSION = 1
+SERIES_SCHEMA_VERSION = 1
+QUALIFIED_REPEATS = 7
+QUALIFIED_SAMPLES = 15
+QUALIFIED_WARMUP = 5
+QUALIFIED_BATCH = 256
+QUALIFIED_MIN_TIME_MS = 50.0
+QUALIFIED_COOLDOWN_SECONDS = 120
+FROZEN_CORRECTNESS_COMMAND = ["make", "bench-correctness"]
 MIN_MEDIAN_IMPROVEMENT = 0.05
 MAX_CROSS_RUN_NORMALIZED_MAD = 0.03
 MIN_ROBUST_MARGIN = 0.03
 MAX_UNTARGETED_REGRESSION = 0.02
 MAD_SCALE = 1.4826
+CORPUS_SHA256 = "1737425a359d1759ec010dd56a2e12e920e34c028820c4301bad7d75fa839bd0"
+CORRECTNESS = {
+    "checksum": "ff938ee3464956dde7deb4940a9caf93bfa9c6951f85a687b7059fad8311a583",
+    "chunked_replay_cases": 8,
+    "fixture_decodes": 46,
+    "sink_order_verified": True,
+    "strict_replay": True,
+    "verified": True,
+}
+PIPELINE_FINGERPRINTS = {
+    "itch50_all": "42f71275830db9a05233c775df3b25b889a5fb13fc72485fa7819201b6a9c5ca",
+    "itch50_order_events": "5091875ac081f047b55ccf8c8231b7aca268e4163d28e59956685944b1403ec1",
+}
+SCHEMA_FINGERPRINT = "5caf2a24f113157cc5e74069339801fd332582dea234e66dd34148a8f12b938a"
+SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
+REVISION_RE = re.compile(r"[0-9a-f]{40}\Z")
+LABEL_RE = re.compile(r"[A-Za-z0-9._-]+\Z")
+CHECKSUM_RE = re.compile(r"0x[0-9a-f]+\Z")
+
+
+def _case(
+    identifier: str,
+    operation: str,
+    pipeline: str,
+    schedule: str | None,
+    schedule_sha256: str | None,
+    workload: str,
+    workload_sha256: str,
+    bytes_per_round: int,
+    messages_per_round: int,
+    events_per_round: int,
+    pushes_per_round: int,
+    finish_calls_per_round: int,
+) -> dict[str, Any]:
+    return {
+        "bytes_per_round": bytes_per_round,
+        "events_per_round": events_per_round,
+        "finish_calls_per_round": finish_calls_per_round,
+        "id": identifier,
+        "messages_per_round": messages_per_round,
+        "operation": operation,
+        "pipeline": pipeline,
+        "pushes_per_round": pushes_per_round,
+        "schedule": schedule,
+        "schedule_sha256": schedule_sha256,
+        "workload": workload,
+        "workload_sha256": workload_sha256,
+    }
+
+
+ALL_DECODE = "be2e5b33f12ce0bc3a28d1181c5de7023c29121ec0350a05538474f1000b2b8f"
+ALL_REPLAY = "80e748f580a51f3a671229787b340bc3d512a3e2587723e92a1a76f72fa9ad03"
+SELECTED_DECODE = "7769824c046be46900b67ae9903ddabdaec43a4c05e6e12d097f0c8b8d3d0951"
+SELECTED_REPLAY = "a533c7046b5ac5c06be48b3620ce51859c65173b838eb133f904871f7dab31a1"
+UNSELECTED_DECODE = "b73ed867fa094dcbb196620a915426a9584d470fa2c175d4f8d49a5fc3936705"
+UNSELECTED_REPLAY = "7019f05855331f57352d859c34fbd1b046bbe047652d2c8cfa62701ebfeb62a8"
+MIXED_DECODE = "bc99dee6ed0216ff3fa36cd6c0d194b5dfe3ce99764b38d35db231347f77d6be"
+FRAME_ALL = "e16b5b699e985c2dd9916830120cb2974d9edd646b33c724ac24e49b70e405a2"
+BYTE_ALL = "f8c85fa1537c901f33832b51b118a62b54fe9083b582f2ca6782d20992b0291a"
+FRAME_SELECTED = "4670b435e031d0860a7015cc87535c4b2abf8e5cc2911527c3cf636782b3a6e4"
+BYTE_SELECTED = "fd2182be180800be95aa07f898bafacc7f015294956251bd0e21f3d7f6da2cd6"
+FRAME_UNSELECTED = "bed1b9d35994d9f6125c47509a134ff110f201d9439546cad9a1c0c9e0d5b42d"
+BYTE_UNSELECTED = "3ca01326df49e2161991b3edb812c10ba8784e8c7c0199fc09dba34a331671e2"
+
+
+FROZEN_CASES = (
+    _case("decode_one/itch50_all/all_types", "decode_one", "itch50_all", None, None,
+          "all_types", ALL_DECODE, 694, 23, 23, 0, 0),
+    _case("replay_binary_file/itch50_all/all_types", "replay_binary_file",
+          "itch50_all", None, None, "all_types", ALL_REPLAY, 742, 23, 23, 0, 0),
+    _case("decode_one/itch50_order_events/selected", "decode_one",
+          "itch50_order_events", None, None, "selected", SELECTED_DECODE,
+          264, 8, 8, 0, 0),
+    _case("replay_binary_file/itch50_order_events/selected", "replay_binary_file",
+          "itch50_order_events", None, None, "selected", SELECTED_REPLAY,
+          282, 8, 8, 0, 0),
+    _case("decode_one/itch50_order_events/unselected", "decode_one",
+          "itch50_order_events", None, None, "unselected", UNSELECTED_DECODE,
+          430, 15, 0, 0, 0),
+    _case("replay_binary_file/itch50_order_events/unselected", "replay_binary_file",
+          "itch50_order_events", None, None, "unselected", UNSELECTED_REPLAY,
+          462, 15, 0, 0, 0),
+    _case("decode_one/itch50_order_events/mixed", "decode_one",
+          "itch50_order_events", None, None, "mixed", MIXED_DECODE,
+          694, 23, 8, 0, 0),
+    _case("replay_binary_file/itch50_order_events/mixed", "replay_binary_file",
+          "itch50_order_events", None, None, "mixed", ALL_REPLAY,
+          742, 23, 8, 0, 0),
+    _case("chunked_replay/frame_aligned/itch50_all/all_types", "chunked_replay",
+          "itch50_all", "frame_aligned", FRAME_ALL, "all_types", ALL_REPLAY,
+          742, 23, 23, 24, 1),
+    _case("chunked_replay/one_byte/itch50_all/all_types", "chunked_replay",
+          "itch50_all", "one_byte", BYTE_ALL, "all_types", ALL_REPLAY,
+          742, 23, 23, 742, 1),
+    _case("chunked_replay/frame_aligned/itch50_order_events/selected",
+          "chunked_replay", "itch50_order_events", "frame_aligned",
+          FRAME_SELECTED, "selected", SELECTED_REPLAY, 282, 8, 8, 9, 1),
+    _case("chunked_replay/one_byte/itch50_order_events/selected",
+          "chunked_replay", "itch50_order_events", "one_byte", BYTE_SELECTED,
+          "selected", SELECTED_REPLAY, 282, 8, 8, 282, 1),
+    _case("chunked_replay/frame_aligned/itch50_order_events/unselected",
+          "chunked_replay", "itch50_order_events", "frame_aligned",
+          FRAME_UNSELECTED, "unselected", UNSELECTED_REPLAY, 462, 15, 0, 16, 1),
+    _case("chunked_replay/one_byte/itch50_order_events/unselected",
+          "chunked_replay", "itch50_order_events", "one_byte", BYTE_UNSELECTED,
+          "unselected", UNSELECTED_REPLAY, 462, 15, 0, 462, 1),
+    _case("chunked_replay/frame_aligned/itch50_order_events/mixed",
+          "chunked_replay", "itch50_order_events", "frame_aligned", FRAME_ALL,
+          "mixed", ALL_REPLAY, 742, 23, 8, 24, 1),
+    _case("chunked_replay/one_byte/itch50_order_events/mixed", "chunked_replay",
+          "itch50_order_events", "one_byte", BYTE_ALL, "mixed", ALL_REPLAY,
+          742, 23, 8, 742, 1),
+)
+
+
+RAW_CSV_FIELDS = (
+    "schema_version", "contract_version", "timestamp_utc", "benchmark_id",
+    "operation", "pipeline", "schedule", "schedule_sha256", "workload",
+    "workload_sha256", "corpus_sha256", "bytes_per_round",
+    "messages_per_round", "events_per_round", "pushes_per_round",
+    "finish_calls_per_round", "rounds_per_sample", "samples", "warmup",
+    "minimum_time_ms", "median_ns_per_message", "p05_ns_per_message",
+    "p95_ns_per_message", "mad_ns_per_message", "median_ns_per_event",
+    "median_ns_per_push", "median_bytes_per_second",
+    "median_messages_per_second", "median_events_per_second", "relative_mad",
+    "relative_p95_p05_spread", "noisy", "implausible",
+    "anti_elision_checksum", "feedforge_version", "source_revision",
+    "source_dirty", "build_type", "compiler_id", "compiler_version",
+    "compiler_path", "config_flags", "target_flags", "os", "kernel",
+    "architecture", "cpu_model", "machine_model", "logical_cpus",
+    "physical_cpus", "memory_bytes", "cpu_affinity", "cpu_governor",
+    "turbo_state", "correctness_checksum", "command",
+)
 
 
 def percentile(values: Iterable[float], quantile: float) -> float:
     ordered = sorted(values)
     if not ordered:
         raise ValueError("cannot summarize an empty sequence")
+    if any(not math.isfinite(value) for value in ordered):
+        raise ValueError("cannot summarize non-finite values")
     position = quantile * (len(ordered) - 1)
     lower = math.floor(position)
     upper = math.ceil(position)
@@ -53,14 +198,14 @@ def distribution(values: Iterable[float]) -> dict[str, float]:
     }
 
 
-def atomic_text(path: Path, text: str) -> None:
+def atomic_text(path: Path, contents: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary = tempfile.mkstemp(
         prefix=f".{path.name}.", dir=path.parent, text=True
     )
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as output:
-            output.write(text)
+            output.write(contents)
             output.flush()
             os.fsync(output.fileno())
         os.replace(temporary, path)
@@ -75,20 +220,18 @@ def atomic_text(path: Path, text: str) -> None:
 def canonical_json(path: Path, value: Any) -> None:
     atomic_text(
         path,
-        json.dumps(
-            value,
-            ensure_ascii=False,
-            allow_nan=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        )
-        + "\n",
+        json.dumps(value, ensure_ascii=False, allow_nan=False,
+                   separators=(",", ":"), sort_keys=True) + "\n",
     )
+
+
+def _reject_json_constant(value: str) -> None:
+    raise ValueError(f"non-finite JSON number: {value}")
 
 
 def load_json(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as source:
-        value = json.load(source)
+        value = json.load(source, parse_constant=_reject_json_constant)
     if not isinstance(value, dict):
         raise ValueError(f"{path} does not contain a JSON object")
     return value
@@ -102,24 +245,420 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def artifact_identity(run: dict[str, Any]) -> dict[str, Any]:
-    benchmarks = []
-    for item in run["benchmarks"]:
-        benchmarks.append(
-            {
-                "bytes_per_round": item["bytes_per_round"],
-                "events_per_round": item["events_per_round"],
-                "id": item["id"],
-                "messages_per_round": item["messages_per_round"],
-                "operation": item["operation"],
-                "pipeline": item["pipeline"],
-                "workload": item["workload"],
-                "workload_sha256": item["workload_sha256"],
-            }
+def _integer(value: Any, context: str, *, minimum: int = 0) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+        raise ValueError(f"{context}: expected an integer >= {minimum}")
+    return value
+
+
+def _number(value: Any, context: str, *, positive: bool = False) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{context}: expected a finite number")
+    result = float(value)
+    if not math.isfinite(result) or (positive and result <= 0.0):
+        raise ValueError(f"{context}: expected a finite positive number")
+    return result
+
+
+def _boolean(value: Any, context: str) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError(f"{context}: expected a boolean")
+    return value
+
+
+def _mapping(value: Any, context: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError(f"{context}: expected an object")
+    return value
+
+
+def _sequence(value: Any, context: str) -> list[Any]:
+    if not isinstance(value, list):
+        raise ValueError(f"{context}: expected an array")
+    return value
+
+
+def _sha256(value: Any, context: str) -> str:
+    if not isinstance(value, str) or not SHA256_RE.fullmatch(value):
+        raise ValueError(f"{context}: expected a lowercase SHA-256")
+    return value
+
+
+def _revision(value: Any, context: str) -> str:
+    if not isinstance(value, str) or not REVISION_RE.fullmatch(value):
+        raise ValueError(f"{context}: expected a lowercase 40-character Git SHA")
+    return value
+
+
+def _close(actual: Any, expected: float, context: str) -> None:
+    value = _number(actual, context)
+    if not math.isclose(value, expected, rel_tol=2e-12, abs_tol=1e-9):
+        raise ValueError(f"{context}: {value!r} does not match derived {expected!r}")
+
+
+def _safe_relative(value: Any, context: str) -> str:
+    if not isinstance(value, str) or not value or "\\" in value:
+        raise ValueError(f"{context}: expected a nonempty POSIX relative path")
+    path = Path(value)
+    if path.is_absolute() or PureWindowsPath(value).is_absolute() or ".." in path.parts:
+        raise ValueError(f"{context}: path must remain relative and contained")
+    return path.as_posix()
+
+
+def _relative_path(path: Path, root: Path, context: str) -> str:
+    try:
+        relative = path.resolve().relative_to(root.resolve())
+    except ValueError as error:
+        raise ValueError(f"{context} must be inside the repository root") from error
+    return _safe_relative(relative.as_posix(), context)
+
+
+def _forbidden_isa_flags(build: dict[str, Any]) -> list[str]:
+    text = f"{build.get('config_flags', '')} {build.get('target_flags', '')}"
+    try:
+        tokens = shlex.split(text)
+    except ValueError:
+        tokens = text.split()
+    prefixes = (
+        "-march", "-mcpu", "-mtune", "-mattr", "-target-cpu",
+        "-target-feature", "--target-feature", "/arch:", "/favor:",
+        "-xarch", "-xhost", "-qarch", "-qtune", "-tp=",
+    )
+    feature_re = re.compile(
+        r"-m(?:no-)?(?:3dnow|adx|aes|altivec|avx|bf16|bmi|cldemote|clflush|"
+        r"clwb|crc|crypto|cx16|dotprod|f16c|fma|fp16|fsgsbase|gfni|hle|i8mm|"
+        r"lwp|lzcnt|mmx|movbe|movdir|mpx|neon|outline-atomics|pclmul|pconfig|"
+        r"pku|popcnt|power|prefetch|prfchw|ptwrite|ras|rcpc|rdpid|rdrnd|rdseed|"
+        r"rtm|rvv|serialize|sgx|sha|shstk|simd|sse|sve|tbm|tsx|uintr|vaes|"
+        r"vector|vpclmul|vsx|waitpkg|wbnoinvd|xop|xsave|zvector)(?:[=+-].*)?\Z",
+        re.IGNORECASE,
+    )
+    rejected: list[str] = []
+    lowered = [token.lower() for token in tokens]
+    for index, token in enumerate(lowered):
+        if token.startswith(prefixes) or feature_re.fullmatch(token):
+            rejected.append(tokens[index])
+        if token in {"-mllvm", "-xclang"} and index + 1 < len(tokens):
+            following = lowered[index + 1]
+            if any(word in following for word in ("target-cpu", "target-feature", "mattr")):
+                rejected.extend(tokens[index:index + 2])
+        if token.startswith("-wa,") and any(
+            word in token for word in ("march", "mcpu", "mtune")
+        ):
+            rejected.append(tokens[index])
+    return list(dict.fromkeys(rejected))
+
+
+def _qualification_config(config: dict[str, Any]) -> bool:
+    return (
+        config.get("batch") == QUALIFIED_BATCH
+        and config.get("samples") == QUALIFIED_SAMPLES
+        and config.get("warmup") == QUALIFIED_WARMUP
+        and config.get("minimum_time_ms") == QUALIFIED_MIN_TIME_MS
+        and config.get("smoke") is False
+    )
+
+
+def _derive_case(item: dict[str, Any], config: dict[str, Any]) -> tuple[
+    dict[str, dict[str, float] | None], dict[str, Any]
+]:
+    samples = _sequence(item.get("samples"), f"{item.get('id', 'case')}.samples")
+    elapsed = [float(_integer(sample.get("elapsed_ns"), "sample.elapsed_ns", minimum=1))
+               for sample in samples]
+    messages = [float(_integer(sample.get("messages"), "sample.messages", minimum=1))
+                for sample in samples]
+    byte_counts = [float(_integer(sample.get("bytes"), "sample.bytes", minimum=1))
+                   for sample in samples]
+    event_counts = [float(_integer(sample.get("events"), "sample.events"))
+                    for sample in samples]
+    push_counts = [float(_integer(sample.get("pushes"), "sample.pushes"))
+                   for sample in samples]
+    ns_per_message = [duration / count for duration, count in zip(elapsed, messages)]
+    statistics: dict[str, dict[str, float] | None] = {
+        "bytes_per_second": distribution(
+            count / (duration / 1_000_000_000.0)
+            for duration, count in zip(elapsed, byte_counts)
+        ),
+        "events_per_second": None,
+        "messages_per_second": distribution(
+            count / (duration / 1_000_000_000.0)
+            for duration, count in zip(elapsed, messages)
+        ),
+        "ns_per_event": None,
+        "ns_per_message": distribution(ns_per_message),
+        "ns_per_push": None,
+        "sample_time_ns": distribution(elapsed),
+    }
+    if any(event_counts):
+        statistics["ns_per_event"] = distribution(
+            duration / count for duration, count in zip(elapsed, event_counts)
         )
+        statistics["events_per_second"] = distribution(
+            count / (duration / 1_000_000_000.0)
+            for duration, count in zip(elapsed, event_counts)
+        )
+    if any(push_counts):
+        statistics["ns_per_push"] = distribution(
+            duration / count for duration, count in zip(elapsed, push_counts)
+        )
+    message_stats = statistics["ns_per_message"]
+    sample_stats = statistics["sample_time_ns"]
+    assert message_stats is not None and sample_stats is not None
+    relative_mad = message_stats["mad"] / message_stats["median"]
+    relative_spread = (
+        message_stats["p95"] - message_stats["p05"]
+    ) / message_stats["median"]
+    noisy = relative_mad > 0.05 or relative_spread > 0.20
+    target_ns = _number(config.get("minimum_time_ms"), "config.minimum_time_ms") * 1_000_000.0
+    implausible = (
+        sample_stats["minimum"] < target_ns
+        or message_stats["median"] < 0.01
+        or sample_stats["minimum"] <= 0.0
+    )
+    warnings = []
+    if noisy:
+        warnings.append(
+            "sample dispersion exceeds the 5% MAD or 20% p95-p05 diagnostic bound"
+        )
+    if implausible:
+        warnings.append(
+            "sample duration or per-message timing is implausible; discard this run"
+        )
+    return statistics, {
+        "implausible": implausible,
+        "noisy": noisy,
+        "relative_mad": relative_mad,
+        "relative_p95_p05_spread": relative_spread,
+        "warnings": warnings,
+    }
+
+
+def _validate_distribution(actual: Any, expected: dict[str, float], context: str) -> None:
+    mapping = _mapping(actual, context)
+    if set(mapping) != set(expected):
+        raise ValueError(f"{context}: distribution fields changed")
+    for name, value in expected.items():
+        _close(mapping.get(name), value, f"{context}.{name}")
+
+
+def _validate_build(
+    build_value: Any,
+    path: Path,
+    expected_source_id: str | None,
+    require_clean_source: bool,
+) -> dict[str, Any]:
+    build = _mapping(build_value, f"{path}: build")
+    required_text = (
+        "build_type", "compiler_builtin", "compiler_id", "compiler_path",
+        "compiler_version", "config_flags", "feedforge_version", "generator",
+        "interprocedural_optimization", "schema_fingerprint", "source_revision",
+        "target_flags",
+    )
+    for key in required_text:
+        if not isinstance(build.get(key), str) or not build[key]:
+            raise ValueError(f"{path}: build.{key} is missing")
+    _integer(build.get("cxx_standard"), f"{path}: build.cxx_standard", minimum=202002)
+    _boolean(build.get("source_dirty"), f"{path}: build.source_dirty")
+    _revision(build.get("source_revision"), f"{path}: build.source_revision")
+    if build.get("build_type") != "Release":
+        raise ValueError(f"{path}: benchmark build is not Release")
+    if build.get("feedforge_version") != "0.6.0":
+        raise ValueError(f"{path}: benchmark executable is not FeedForge 0.6.0")
+    if build.get("interprocedural_optimization") != "OFF":
+        raise ValueError(f"{path}: interprocedural optimization must be OFF")
+    if build.get("schema_fingerprint") != SCHEMA_FINGERPRINT:
+        raise ValueError(f"{path}: schema fingerprint changed")
+    if build.get("pipeline_fingerprints") != PIPELINE_FINGERPRINTS:
+        raise ValueError(f"{path}: generated pipeline fingerprints changed")
+    rejected = _forbidden_isa_flags(build)
+    if rejected:
+        raise ValueError(
+            f"{path}: CPU-specific ISA/tuning flag is forbidden: "
+            + " ".join(rejected)
+        )
+    if expected_source_id is not None and build.get("source_revision") != expected_source_id:
+        raise ValueError(f"{path}: executable source revision does not match requested SHA")
+    if require_clean_source and build.get("source_dirty") is not False:
+        raise ValueError(f"{path}: executable was configured from a dirty source tree")
+    return build
+
+
+def _validate_corpus(corpus_value: Any, path: Path) -> None:
+    corpus = _mapping(corpus_value, f"{path}: corpus")
+    if corpus.get("sha256") != CORPUS_SHA256:
+        raise ValueError(f"{path}: frozen corpus hash changed")
+    if corpus.get("fixture_count") != 23:
+        raise ValueError(f"{path}: frozen corpus must contain 23 fixtures")
+    if corpus.get("source") != "independently reviewed tests/fixtures/itch50 raw_hex":
+        raise ValueError(f"{path}: corpus source statement changed")
+    fixtures = _sequence(corpus.get("fixtures"), f"{path}: corpus.fixtures")
+    if len(fixtures) != 23:
+        raise ValueError(f"{path}: corpus fixture list must contain 23 entries")
+    files: list[str] = []
+    for index, fixture_value in enumerate(fixtures, start=1):
+        fixture = _mapping(fixture_value, f"{path}: fixture {index}")
+        for field in ("byte_source", "file", "message_name", "message_type",
+                      "review_status", "reviewer"):
+            if not isinstance(fixture.get(field), str) or not fixture[field]:
+                raise ValueError(f"{path}: fixture {index} lacks {field}")
+        _boolean(fixture.get("order_events_selected"),
+                 f"{path}: fixture {index}.order_events_selected")
+        _sha256(fixture.get("sha256"), f"{path}: fixture {index}.sha256")
+        _integer(fixture.get("size"), f"{path}: fixture {index}.size", minimum=1)
+        files.append(fixture["file"])
+    if len(set(files)) != 23 or files != sorted(files):
+        raise ValueError(f"{path}: fixture files are duplicated or out of order")
+
+
+def _validate_command(command_value: Any, path: Path) -> None:
+    command = _mapping(command_value, f"{path}: command")
+    arguments = _sequence(command.get("argv"), f"{path}: command.argv")
+    if not arguments or any(not isinstance(item, str) or not item for item in arguments):
+        raise ValueError(f"{path}: command argv is empty or malformed")
+    if command.get("working_directory") != ".":
+        raise ValueError(f"{path}: benchmark working directory must be relative '.'")
+    if not isinstance(command.get("joined"), str) or not command["joined"]:
+        raise ValueError(f"{path}: joined benchmark command is missing")
+    for index, argument in enumerate(arguments):
+        if index == 0 or (index > 0 and arguments[index - 1] in {"--json", "--csv"}):
+            _safe_relative(argument, f"{path}: command argv[{index}]")
+
+
+def validate_run(
+    run: dict[str, Any],
+    path: Path,
+    *,
+    expected_source_id: str | None = None,
+    require_clean_source: bool = False,
+) -> None:
+    if run.get("schema_version") != RESULT_SCHEMA_VERSION:
+        raise ValueError(f"{path}: unsupported result schema")
+    if run.get("contract_version") != CONTRACT_VERSION:
+        raise ValueError(f"{path}: unsupported benchmark contract")
+    if run.get("publishable") is not False:
+        raise ValueError(f"{path}: a single-process artifact must be non-publishable")
+    if run.get("correctness") != CORRECTNESS:
+        raise ValueError(f"{path}: pre-timing correctness contract changed")
+    _validate_corpus(run.get("corpus"), path)
+    build = _validate_build(
+        run.get("build"), path, expected_source_id, require_clean_source
+    )
+    config = _mapping(run.get("config"), f"{path}: config")
+    if config.get("clock") != "std::chrono::steady_clock":
+        raise ValueError(f"{path}: unexpected benchmark clock")
+    if config.get("clock_is_steady") is not True:
+        raise ValueError(f"{path}: steady clock was not available")
+    batch = _integer(config.get("batch"), f"{path}: config.batch", minimum=1)
+    samples_count = _integer(config.get("samples"), f"{path}: config.samples", minimum=1)
+    _integer(config.get("warmup"), f"{path}: config.warmup", minimum=1)
+    _number(config.get("minimum_time_ms"), f"{path}: config.minimum_time_ms", positive=True)
+    _boolean(config.get("smoke"), f"{path}: config.smoke")
+    timer_resolution = _number(
+        config.get("timer_resolution_ns"), f"{path}: config.timer_resolution_ns", positive=True
+    )
+    if timer_resolution > 100_000.0:
+        raise ValueError(f"{path}: steady-clock resolution is too coarse")
+    _validate_command(run.get("command"), path)
+    host = _mapping(run.get("host"), f"{path}: host")
+    for field in ("architecture", "cpu_affinity", "cpu_governor", "cpu_model",
+                  "kernel", "machine_model", "os", "turbo_state"):
+        if not isinstance(host.get(field), str) or not host[field]:
+            raise ValueError(f"{path}: host.{field} is missing")
+    for field in ("logical_cpus", "physical_cpus", "memory_bytes"):
+        _integer(host.get(field), f"{path}: host.{field}", minimum=1)
+    limitations = _sequence(host.get("limitations"), f"{path}: host.limitations")
+    if any(not isinstance(item, str) or not item for item in limitations):
+        raise ValueError(f"{path}: host limitations are malformed")
+    if not isinstance(run.get("timestamp_utc"), str) or not run["timestamp_utc"].endswith("Z"):
+        raise ValueError(f"{path}: UTC timestamp is missing")
+    warnings = _sequence(run.get("warnings"), f"{path}: warnings")
+    if any(not isinstance(item, str) or not item for item in warnings):
+        raise ValueError(f"{path}: top-level warnings are malformed")
+
+    benchmarks = _sequence(run.get("benchmarks"), f"{path}: benchmarks")
+    if len(benchmarks) != len(FROZEN_CASES):
+        raise ValueError(f"{path}: expected the frozen 16 benchmark cases")
+    for index, (item_value, expected) in enumerate(zip(benchmarks, FROZEN_CASES)):
+        item = _mapping(item_value, f"{path}: benchmark {index + 1}")
+        identifier = expected["id"]
+        for field, expected_value in expected.items():
+            if item.get(field) != expected_value:
+                raise ValueError(
+                    f"{path}: {identifier}.{field} changed from the frozen contract"
+                )
+        rounds = _integer(
+            item.get("rounds_per_sample"), f"{path}: {identifier}.rounds_per_sample",
+            minimum=batch,
+        )
+        if rounds % batch != 0:
+            raise ValueError(f"{path}: {identifier} rounds are not a batch multiple")
+        case_samples = _sequence(item.get("samples"), f"{path}: {identifier}.samples")
+        if len(case_samples) != samples_count:
+            raise ValueError(f"{path}: {identifier} sample count mismatch")
+        checksums: set[str] = set()
+        for sample_index, sample_value in enumerate(case_samples, start=1):
+            sample = _mapping(sample_value, f"{path}: {identifier} sample {sample_index}")
+            if set(sample) != {
+                "bytes", "checksum", "elapsed_ns", "events", "finish_calls",
+                "messages", "pushes", "rounds",
+            }:
+                raise ValueError(f"{path}: {identifier} sample fields changed")
+            if sample.get("rounds") != rounds:
+                raise ValueError(f"{path}: {identifier} sample rounds changed")
+            for field, case_field in (
+                ("bytes", "bytes_per_round"),
+                ("messages", "messages_per_round"),
+                ("events", "events_per_round"),
+                ("pushes", "pushes_per_round"),
+                ("finish_calls", "finish_calls_per_round"),
+            ):
+                if sample.get(field) != expected[case_field] * rounds:
+                    raise ValueError(f"{path}: {identifier} sample {field} changed")
+            _integer(sample.get("elapsed_ns"), f"{path}: {identifier}.elapsed_ns", minimum=1)
+            checksum = sample.get("checksum")
+            if not isinstance(checksum, str) or not CHECKSUM_RE.fullmatch(checksum):
+                raise ValueError(f"{path}: {identifier} checksum is malformed")
+            if int(checksum, 16) == 0:
+                raise ValueError(f"{path}: {identifier} checksum is zero")
+            checksums.add(checksum)
+        if len(checksums) != 1 or item.get("anti_elision_checksum") not in checksums:
+            raise ValueError(f"{path}: {identifier} anti-elision checksum changed")
+        expected_statistics, expected_quality = _derive_case(item, config)
+        statistics = _mapping(item.get("statistics"), f"{path}: {identifier}.statistics")
+        if set(statistics) != set(expected_statistics):
+            raise ValueError(f"{path}: {identifier} statistics fields changed")
+        for name, derived in expected_statistics.items():
+            actual = statistics.get(name)
+            if derived is None:
+                if actual is not None:
+                    raise ValueError(f"{path}: {identifier}.{name} must be null")
+            else:
+                _validate_distribution(actual, derived, f"{path}: {identifier}.{name}")
+        quality = _mapping(item.get("quality"), f"{path}: {identifier}.quality")
+        if set(quality) != set(expected_quality):
+            raise ValueError(f"{path}: {identifier} quality fields changed")
+        for name in ("implausible", "noisy", "warnings"):
+            if quality.get(name) != expected_quality[name]:
+                raise ValueError(f"{path}: {identifier} derived quality.{name} changed")
+        _close(quality.get("relative_mad"), expected_quality["relative_mad"],
+               f"{path}: {identifier}.quality.relative_mad")
+        _close(quality.get("relative_p95_p05_spread"),
+               expected_quality["relative_p95_p05_spread"],
+               f"{path}: {identifier}.quality.relative_p95_p05_spread")
+        if expected_quality["implausible"]:
+            raise ValueError(f"{path}: {identifier} is implausible")
+
+    if expected_source_id is not None and build["source_revision"] != expected_source_id:
+        raise ValueError(f"{path}: source revision drifted")
+
+
+def artifact_identity(run: dict[str, Any]) -> dict[str, Any]:
+    cases = []
+    for item in run["benchmarks"]:
+        cases.append({key: item[key] for key in FROZEN_CASES[0]})
     config = run["config"]
     return {
-        "benchmarks": benchmarks,
+        "benchmarks": cases,
         "build": run["build"],
         "config": {
             "batch": config["batch"],
@@ -138,54 +677,113 @@ def artifact_identity(run: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def validate_run(run: dict[str, Any], path: Path) -> None:
-    if run.get("schema_version") != 1:
-        raise ValueError(f"{path}: unsupported result schema")
-    if run.get("contract_version") != "1.0.0":
-        raise ValueError(f"{path}: unsupported benchmark contract")
-    if run.get("publishable") is not False:
-        raise ValueError(f"{path}: single-run artifact must be non-publishable")
-    if not run.get("correctness", {}).get("verified"):
-        raise ValueError(f"{path}: pre-timing correctness was not verified")
-    if run.get("config", {}).get("clock_is_steady") is not True:
-        raise ValueError(f"{path}: steady clock was not available")
-    benchmarks = run.get("benchmarks")
-    if not isinstance(benchmarks, list) or len(benchmarks) != 8:
-        raise ValueError(f"{path}: expected the frozen eight benchmark cases")
-    identifiers = [item["id"] for item in benchmarks]
-    if len(set(identifiers)) != len(identifiers):
-        raise ValueError(f"{path}: duplicate benchmark identifiers")
-    for item in benchmarks:
-        if item["quality"]["implausible"]:
-            raise ValueError(f"{path}: {item['id']} is implausible")
-        samples = item.get("samples", [])
-        if len(samples) != run["config"]["samples"]:
-            raise ValueError(f"{path}: {item['id']} sample count mismatch")
-        if len({sample["checksum"] for sample in samples}) != 1:
-            raise ValueError(f"{path}: {item['id']} anti-elision checksum changed")
-        for sample in samples:
-            if sample["messages"] <= 0 or sample["bytes"] <= 0:
-                raise ValueError(f"{path}: {item['id']} has an empty timed sample")
+def _raw_csv_expected(run: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
+    stats = item["statistics"]
+    build = run["build"]
+    host = run["host"]
+    return {
+        "schema_version": run["schema_version"],
+        "contract_version": run["contract_version"],
+        "timestamp_utc": run["timestamp_utc"],
+        "benchmark_id": item["id"],
+        "operation": item["operation"],
+        "pipeline": item["pipeline"],
+        "schedule": item["schedule"] or "",
+        "schedule_sha256": item["schedule_sha256"] or "",
+        "workload": item["workload"],
+        "workload_sha256": item["workload_sha256"],
+        "corpus_sha256": run["corpus"]["sha256"],
+        "bytes_per_round": item["bytes_per_round"],
+        "messages_per_round": item["messages_per_round"],
+        "events_per_round": item["events_per_round"],
+        "pushes_per_round": item["pushes_per_round"],
+        "finish_calls_per_round": item["finish_calls_per_round"],
+        "rounds_per_sample": item["rounds_per_sample"],
+        "samples": run["config"]["samples"],
+        "warmup": run["config"]["warmup"],
+        "minimum_time_ms": run["config"]["minimum_time_ms"],
+        "median_ns_per_message": stats["ns_per_message"]["median"],
+        "p05_ns_per_message": stats["ns_per_message"]["p05"],
+        "p95_ns_per_message": stats["ns_per_message"]["p95"],
+        "mad_ns_per_message": stats["ns_per_message"]["mad"],
+        "median_ns_per_event": "" if stats["ns_per_event"] is None
+        else stats["ns_per_event"]["median"],
+        "median_ns_per_push": "" if stats["ns_per_push"] is None
+        else stats["ns_per_push"]["median"],
+        "median_bytes_per_second": stats["bytes_per_second"]["median"],
+        "median_messages_per_second": stats["messages_per_second"]["median"],
+        "median_events_per_second": "" if stats["events_per_second"] is None
+        else stats["events_per_second"]["median"],
+        "relative_mad": item["quality"]["relative_mad"],
+        "relative_p95_p05_spread": item["quality"]["relative_p95_p05_spread"],
+        "noisy": str(item["quality"]["noisy"]).lower(),
+        "implausible": str(item["quality"]["implausible"]).lower(),
+        "anti_elision_checksum": item["anti_elision_checksum"],
+        "feedforge_version": build["feedforge_version"],
+        "source_revision": build["source_revision"],
+        "source_dirty": str(build["source_dirty"]).lower(),
+        "build_type": build["build_type"],
+        "compiler_id": build["compiler_id"],
+        "compiler_version": build["compiler_version"],
+        "compiler_path": build["compiler_path"],
+        "config_flags": build["config_flags"],
+        "target_flags": build["target_flags"],
+        "os": host["os"],
+        "kernel": host["kernel"],
+        "architecture": host["architecture"],
+        "cpu_model": host["cpu_model"],
+        "machine_model": host["machine_model"],
+        "logical_cpus": host["logical_cpus"],
+        "physical_cpus": host["physical_cpus"],
+        "memory_bytes": host["memory_bytes"],
+        "cpu_affinity": host["cpu_affinity"],
+        "cpu_governor": host["cpu_governor"],
+        "turbo_state": host["turbo_state"],
+        "correctness_checksum": run["correctness"]["checksum"],
+        "command": run["command"]["joined"],
+    }
+
+
+def validate_raw_csv(path: Path, run: dict[str, Any]) -> None:
+    with path.open("r", encoding="utf-8", newline="") as source:
+        reader = csv.DictReader(source)
+        if tuple(reader.fieldnames or ()) != RAW_CSV_FIELDS:
+            raise ValueError(f"{path}: raw CSV header changed")
+        rows = list(reader)
+    if len(rows) != len(FROZEN_CASES):
+        raise ValueError(f"{path}: raw CSV must contain 16 rows")
+    numeric_float = {
+        "minimum_time_ms", "median_ns_per_message", "p05_ns_per_message",
+        "p95_ns_per_message", "mad_ns_per_message", "median_ns_per_event",
+        "median_ns_per_push", "median_bytes_per_second",
+        "median_messages_per_second", "median_events_per_second", "relative_mad",
+        "relative_p95_p05_spread",
+    }
+    for index, (row, item) in enumerate(zip(rows, run["benchmarks"]), start=1):
+        expected = _raw_csv_expected(run, item)
+        for field in RAW_CSV_FIELDS:
+            actual = row[field]
+            wanted = expected[field]
+            context = f"{path}: row {index} {field}"
+            if field in numeric_float and wanted != "":
+                try:
+                    parsed = float(actual)
+                except ValueError as error:
+                    raise ValueError(f"{context}: expected a number") from error
+                _close(parsed, float(wanted), context)
+            elif actual != str(wanted):
+                raise ValueError(f"{context}: does not match raw JSON")
 
 
 def series_csv(series: dict[str, Any]) -> str:
     fields = [
-        "benchmark_id",
-        "median_ns_per_message",
-        "p05_ns_per_message",
-        "p95_ns_per_message",
-        "mad_ns_per_message",
-        "normalized_mad",
-        "comparison_ready",
-        "repeat_count",
-        "corpus_sha256",
-        "compiler",
-        "build_type",
-        "os",
-        "architecture",
-        "cpu_model",
+        "benchmark_id", "median_ns_per_message", "p05_ns_per_message",
+        "p95_ns_per_message", "mad_ns_per_message", "normalized_mad",
+        "comparison_ready", "repeat_count", "corpus_sha256", "compiler",
+        "build_type", "os", "architecture", "cpu_model", "source_id",
+        "executable_sha256",
     ]
-    stream = __import__("io").StringIO(newline="")
+    stream = io.StringIO(newline="")
     writer = csv.DictWriter(stream, fieldnames=fields, lineterminator="\n")
     writer.writeheader()
     identity = series["identity"]
@@ -193,9 +791,7 @@ def series_csv(series: dict[str, Any]) -> str:
         writer.writerow(
             {
                 "benchmark_id": item["id"],
-                "median_ns_per_message": format(
-                    item["ns_per_message"]["median"], ".17g"
-                ),
+                "median_ns_per_message": format(item["ns_per_message"]["median"], ".17g"),
                 "p05_ns_per_message": format(item["ns_per_message"]["p05"], ".17g"),
                 "p95_ns_per_message": format(item["ns_per_message"]["p95"], ".17g"),
                 "mad_ns_per_message": format(item["ns_per_message"]["mad"], ".17g"),
@@ -211,20 +807,45 @@ def series_csv(series: dict[str, Any]) -> str:
                 "os": identity["host"]["os"],
                 "architecture": identity["host"]["architecture"],
                 "cpu_model": identity["host"]["cpu_model"],
+                "source_id": series["source_id"],
+                "executable_sha256": series["executable_sha256"],
             }
         )
     return stream.getvalue()
 
 
+def _thresholds() -> dict[str, Any]:
+    return {
+        "batch": QUALIFIED_BATCH,
+        "cooldown_seconds": QUALIFIED_COOLDOWN_SECONDS,
+        "max_cross_run_normalized_mad": MAX_CROSS_RUN_NORMALIZED_MAD,
+        "max_untargeted_regression": MAX_UNTARGETED_REGRESSION,
+        "min_median_improvement": MIN_MEDIAN_IMPROVEMENT,
+        "min_repeats": QUALIFIED_REPEATS,
+        "min_robust_margin": MIN_ROBUST_MARGIN,
+        "min_sample_time_ms": QUALIFIED_MIN_TIME_MS,
+        "samples": QUALIFIED_SAMPLES,
+        "warmup": QUALIFIED_WARMUP,
+    }
+
+
 def build_series(
     runs: list[dict[str, Any]],
-    run_files: list[str],
+    raw_runs: list[dict[str, str]],
+    *,
     label: str,
     command: list[str],
-    correctness_command: list[str] | None,
-    executable: Path,
+    correctness: dict[str, Any],
+    executable: str,
+    executable_sha256_before: str,
+    executable_sha256_after: str,
     source_id: str,
+    cooldown_seconds: int,
+    diagnostic_only: bool,
+    timestamp_utc: str | None = None,
 ) -> dict[str, Any]:
+    if not runs:
+        raise ValueError("cannot build a benchmark series without raw runs")
     identity = artifact_identity(runs[0])
     for index, run in enumerate(runs[1:], start=2):
         if artifact_identity(run) != identity:
@@ -237,16 +858,13 @@ def build_series(
     all_within_run_quiet = True
     for benchmark_index, template in enumerate(runs[0]["benchmarks"]):
         medians = [
-            run["benchmarks"][benchmark_index]["statistics"]["ns_per_message"][
-                "median"
-            ]
+            run["benchmarks"][benchmark_index]["statistics"]["ns_per_message"]["median"]
             for run in runs
         ]
         summary = distribution(medians)
         normalized_mad = summary["mad"] / summary["median"]
         noisy_runs = [
-            index + 1
-            for index, run in enumerate(runs)
+            index + 1 for index, run in enumerate(runs)
             if run["benchmarks"][benchmark_index]["quality"]["noisy"]
         ]
         if noisy_runs:
@@ -258,8 +876,7 @@ def build_series(
         if normalized_mad > MAX_CROSS_RUN_NORMALIZED_MAD:
             warnings.append(
                 f"{template['id']}: cross-run normalized MAD "
-                f"{normalized_mad:.2%} exceeds "
-                f"{MAX_CROSS_RUN_NORMALIZED_MAD:.0%}"
+                f"{normalized_mad:.2%} exceeds {MAX_CROSS_RUN_NORMALIZED_MAD:.0%}"
             )
         aggregate.append(
             {
@@ -270,151 +887,252 @@ def build_series(
             }
         )
 
-    config = identity["config"]
-    threshold_ready = (
-        len(runs) >= MIN_REPEATS
-        and config["samples"] >= MIN_SAMPLES
-        and config["minimum_time_ms"] >= MIN_SAMPLE_TIME_MS
-        and config["smoke"] is False
-        and identity["build"]["build_type"] == "Release"
-    )
+    config_exact = _qualification_config(identity["config"])
+    repeat_count_exact = len(runs) == QUALIFIED_REPEATS
     cross_run_quiet = all(
         item["normalized_mad"] <= MAX_CROSS_RUN_NORMALIZED_MAD
         for item in aggregate
     )
-    comparison_ready = threshold_ready and cross_run_quiet and all_within_run_quiet
-    if len(runs) < MIN_REPEATS:
-        warnings.append(
-            f"repeat count {len(runs)} is below the frozen minimum {MIN_REPEATS}"
-        )
-    if config["samples"] < MIN_SAMPLES:
-        warnings.append(
-            f"sample count {config['samples']} is below the frozen minimum "
-            f"{MIN_SAMPLES}"
-        )
-    if config["minimum_time_ms"] < MIN_SAMPLE_TIME_MS:
-        warnings.append(
-            f"sample time {config['minimum_time_ms']} ms is below the frozen minimum "
-            f"{MIN_SAMPLE_TIME_MS:g} ms"
-        )
-    warnings.append(
-        "a baseline series alone is not a performance claim; compare a "
-        "correctness-equivalent candidate"
+    sources_exact = all(
+        run["build"]["source_revision"] == source_id
+        and run["build"]["source_dirty"] is False
+        for run in runs
     )
-
+    executable_unchanged = (
+        executable_sha256_before == executable_sha256_after
+        and SHA256_RE.fullmatch(executable_sha256_before) is not None
+    )
+    correctness_exact = correctness.get("command") == FROZEN_CORRECTNESS_COMMAND
+    cooldown_exact = cooldown_seconds == QUALIFIED_COOLDOWN_SECONDS
+    raw_count_exact = len(raw_runs) == QUALIFIED_REPEATS
+    qualified = all(
+        (
+            config_exact,
+            repeat_count_exact,
+            cross_run_quiet,
+            all_within_run_quiet,
+            sources_exact,
+            executable_unchanged,
+            correctness_exact,
+            cooldown_exact,
+            raw_count_exact,
+            not diagnostic_only,
+        )
+    )
+    checks = {
+        "all_runs_quiet": all_within_run_quiet,
+        "config_exact": config_exact,
+        "cooldown_exact": cooldown_exact,
+        "correctness_command_exact": correctness_exact,
+        "cross_run_quiet": cross_run_quiet,
+        "executable_unchanged": executable_unchanged,
+        "raw_count_exact": raw_count_exact,
+        "repeat_count_exact": repeat_count_exact,
+        "sources_exact": sources_exact,
+    }
+    for name, passed in checks.items():
+        if not passed:
+            warnings.append(f"qualification check failed: {name}")
+    if diagnostic_only:
+        warnings.append("--allow-unqualified was used; this series is diagnostic only")
+    warnings.append(
+        "a contract 2.0 baseline is not an optimization, feed-latency, or production-throughput claim"
+    )
+    timestamp = timestamp_utc or (
+        dt.datetime.now(dt.timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
     return {
         "benchmarks": aggregate,
         "command": command,
-        "comparison_ready": comparison_ready,
-        "correctness_command": correctness_command,
-        "executable": str(executable),
-        "executable_sha256": sha256_file(executable),
+        "comparison_ready": qualified,
+        "contract_version": CONTRACT_VERSION,
+        "cooldown_seconds": cooldown_seconds,
+        "correctness": correctness,
+        "diagnostic_only": diagnostic_only,
+        "executable": executable,
+        "executable_sha256": executable_sha256_before,
+        "executable_sha256_after": executable_sha256_after,
+        "executable_sha256_before": executable_sha256_before,
         "identity": identity,
         "label": label,
+        "qualification": {"checks": checks, "qualified": qualified},
         "repeat_count": len(runs),
-        "run_files": run_files,
-        "schema_version": 1,
+        "run_files": raw_runs,
+        "schema_version": SERIES_SCHEMA_VERSION,
         "source_id": source_id,
-        "thresholds": {
-            "max_cross_run_normalized_mad": MAX_CROSS_RUN_NORMALIZED_MAD,
-            "max_untargeted_regression": MAX_UNTARGETED_REGRESSION,
-            "min_median_improvement": MIN_MEDIAN_IMPROVEMENT,
-            "min_repeats": MIN_REPEATS,
-            "min_robust_margin": MIN_ROBUST_MARGIN,
-            "min_sample_time_ms": MIN_SAMPLE_TIME_MS,
-            "min_samples": MIN_SAMPLES,
-        },
-        "timestamp_utc": dt.datetime.now(dt.timezone.utc)
-        .replace(microsecond=0)
-        .isoformat()
-        .replace("+00:00", "Z"),
+        "source_root": ".",
+        "thresholds": _thresholds(),
+        "timestamp_utc": timestamp,
         "warnings": warnings,
     }
 
 
+def _git(root: Path, *arguments: str) -> str:
+    completed = subprocess.run(
+        ["git", "-C", str(root), *arguments],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or completed.stdout.strip()
+        raise ValueError(f"git {' '.join(arguments)} failed: {detail}")
+    return completed.stdout.strip()
+
+
+def repository_root(path: Path) -> Path:
+    resolved = path.resolve()
+    root = Path(_git(resolved, "rev-parse", "--show-toplevel")).resolve()
+    if root != resolved:
+        raise ValueError(f"benchmark cwd must be the exact Git root: {root}")
+    return root
+
+
+def verify_checkout(root: Path, source_id: str) -> None:
+    _revision(source_id, "source id")
+    head = _git(root, "rev-parse", "HEAD")
+    if head != source_id:
+        raise ValueError(f"Git HEAD {head} does not match source id {source_id}")
+    status = _git(root, "status", "--porcelain", "--untracked-files=no")
+    if status:
+        raise ValueError("tracked Git worktree is not clean")
+
+
+def _resolve_from_root(value: Path, root: Path) -> Path:
+    return value.resolve() if value.is_absolute() else (root / value).resolve()
+
+
+def _raw_record(output_dir: Path, stem: str) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for kind, suffix in (("json", ".json"), ("csv", ".csv"), ("log", ".txt")):
+        name = f"{stem}{suffix}"
+        result[kind] = name
+        result[f"{kind}_sha256"] = sha256_file(output_dir / name)
+    return result
+
+
 def run_series(args: argparse.Namespace) -> int:
-    executable = args.executable.resolve()
+    root = repository_root(args.cwd)
+    source_id = _revision(args.source_id, "--source-id")
+    if not LABEL_RE.fullmatch(args.label):
+        raise ValueError("--label must match [A-Za-z0-9._-]+")
+    if os.environ.get("CI"):
+        raise ValueError("benchmark timing under CI is forbidden")
+    verify_checkout(root, source_id)
+
+    executable = _resolve_from_root(args.executable, root)
     if not executable.is_file():
         raise ValueError(f"benchmark executable does not exist: {executable}")
-    if args.repeats <= 0:
-        raise ValueError("--repeats must be positive")
-    output_dir = args.output_dir.resolve()
+    executable_relative = _relative_path(executable, root, "benchmark executable")
+    output_dir = _resolve_from_root(args.output_dir, root)
+    output_relative = _relative_path(output_dir, root, "benchmark output directory")
     if output_dir.exists() and any(output_dir.iterdir()):
         raise ValueError(f"output directory is not empty: {output_dir}")
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    correctness_command = (
-        shlex.split(args.correctness_command) if args.correctness_command else None
-    )
-    if correctness_command:
-        print("running external correctness command:", shlex.join(correctness_command))
-        completed = subprocess.run(
-            correctness_command,
-            cwd=args.cwd,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            check=False,
-        )
-        atomic_text(output_dir / "correctness.txt", completed.stdout)
-        if completed.returncode != 0:
-            raise RuntimeError(
-                f"correctness command failed with exit code {completed.returncode}"
-            )
+    if args.repeats <= 0 or args.samples <= 0 or args.warmup <= 0 or args.batch <= 0:
+        raise ValueError("repeat, sample, warmup, and batch counts must be positive")
+    if args.min_time_ms <= 0.0 or args.cooldown_seconds < 0:
+        raise ValueError("sample time must be positive and cooldown must be nonnegative")
+    correctness_command = shlex.split(args.correctness_command)
+    if correctness_command != FROZEN_CORRECTNESS_COMMAND:
+        raise ValueError("--correctness-command is frozen as 'make bench-correctness'")
 
+    executable_before = sha256_file(executable)
+    print("running frozen correctness command:", shlex.join(correctness_command))
+    completed = subprocess.run(
+        correctness_command,
+        cwd=root,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+    correctness_path = output_dir / "correctness.txt"
+    atomic_text(correctness_path, completed.stdout)
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"correctness command failed with exit code {completed.returncode}; "
+            f"see {correctness_path}"
+        )
+    verify_checkout(root, source_id)
+    if sha256_file(executable) != executable_before:
+        raise ValueError("benchmark executable changed during correctness validation")
+    correctness = {
+        "command": correctness_command,
+        "exit_code": completed.returncode,
+        "log": "correctness.txt",
+        "log_sha256": sha256_file(correctness_path),
+    }
+
+    print(f"cooldown: {args.cooldown_seconds} seconds")
+    time.sleep(args.cooldown_seconds)
     common = [
-        str(executable),
-        "--samples",
-        str(args.samples),
-        "--warmup",
-        str(args.warmup),
-        "--batch",
-        str(args.batch),
-        "--min-time-ms",
-        format(args.min_time_ms, "g"),
+        executable_relative,
+        "--samples", str(args.samples),
+        "--warmup", str(args.warmup),
+        "--batch", str(args.batch),
+        "--min-time-ms", format(args.min_time_ms, "g"),
     ]
     runs: list[dict[str, Any]] = []
-    run_files: list[str] = []
+    raw_runs: list[dict[str, str]] = []
     for index in range(1, args.repeats + 1):
         stem = f"run-{index:02d}"
-        json_path = output_dir / f"{stem}.json"
-        csv_path = output_dir / f"{stem}.csv"
-        command = common + ["--json", str(json_path), "--csv", str(csv_path)]
+        json_relative = f"{output_relative}/{stem}.json"
+        csv_relative = f"{output_relative}/{stem}.csv"
+        command = common + ["--json", json_relative, "--csv", csv_relative]
         print(f"[{index}/{args.repeats}] {shlex.join(command)}")
         completed = subprocess.run(
             command,
-            cwd=args.cwd,
+            cwd=root,
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             check=False,
         )
-        atomic_text(output_dir / f"{stem}.txt", completed.stdout)
+        log_path = output_dir / f"{stem}.txt"
+        atomic_text(log_path, completed.stdout)
         if completed.returncode != 0:
             raise RuntimeError(
-                f"{stem} failed with exit code {completed.returncode}; "
-                f"see {output_dir / f'{stem}.txt'}"
+                f"{stem} failed with exit code {completed.returncode}; see {log_path}"
             )
+        if sha256_file(executable) != executable_before:
+            raise ValueError(f"benchmark executable changed during {stem}")
+        json_path = output_dir / f"{stem}.json"
+        csv_path = output_dir / f"{stem}.csv"
         run = load_json(json_path)
-        validate_run(run, json_path)
+        validate_run(
+            run, json_path, expected_source_id=source_id, require_clean_source=True
+        )
+        validate_raw_csv(csv_path, run)
         runs.append(run)
-        run_files.append(json_path.name)
+        raw_runs.append(_raw_record(output_dir, stem))
 
+    verify_checkout(root, source_id)
+    executable_after = sha256_file(executable)
     series = build_series(
         runs,
-        run_files,
-        args.label,
-        common,
-        correctness_command,
-        executable,
-        args.source_id,
+        raw_runs,
+        label=args.label,
+        command=common,
+        correctness=correctness,
+        executable=executable_relative,
+        executable_sha256_before=executable_before,
+        executable_sha256_after=executable_after,
+        source_id=source_id,
+        cooldown_seconds=args.cooldown_seconds,
+        diagnostic_only=args.allow_unqualified,
     )
     canonical_json(output_dir / "series.json", series)
     atomic_text(output_dir / "series.csv", series_csv(series))
     print()
     print(
         f"{args.label}: {len(runs)} repeats; "
-        f"comparison_ready={str(series['comparison_ready']).lower()}"
+        f"qualified={str(series['qualification']['qualified']).lower()}"
     )
     for item in series["benchmarks"]:
         print(
@@ -424,13 +1142,182 @@ def run_series(args: argparse.Namespace) -> int:
     for warning in series["warnings"]:
         print("warning:", warning)
     print("series:", output_dir / "series.json")
+    if series["qualification"]["qualified"] or args.allow_unqualified:
+        return 0
+    return 1
+
+
+def _validate_raw_record(record_value: Any, index: int) -> dict[str, str]:
+    record = _mapping(record_value, f"run_files[{index - 1}]")
+    expected_keys = {
+        "json", "json_sha256", "csv", "csv_sha256", "log", "log_sha256"
+    }
+    if set(record) != expected_keys:
+        raise ValueError(f"run_files[{index - 1}]: fields changed")
+    stem = f"run-{index:02d}"
+    for kind, suffix in (("json", ".json"), ("csv", ".csv"), ("log", ".txt")):
+        if record.get(kind) != f"{stem}{suffix}":
+            raise ValueError(f"run_files[{index - 1}].{kind}: unexpected name")
+        _safe_relative(record[kind], f"run_files[{index - 1}].{kind}")
+        _sha256(record.get(f"{kind}_sha256"),
+                f"run_files[{index - 1}].{kind}_sha256")
+    return record
+
+
+def _verify_series_shape(series: dict[str, Any], path: Path) -> None:
+    if series.get("schema_version") != SERIES_SCHEMA_VERSION:
+        raise ValueError(f"{path}: unsupported series schema")
+    if series.get("contract_version") != CONTRACT_VERSION:
+        raise ValueError(f"{path}: unsupported series contract")
+    if not isinstance(series.get("label"), str) or not LABEL_RE.fullmatch(series["label"]):
+        raise ValueError(f"{path}: invalid series label")
+    _revision(series.get("source_id"), f"{path}: source_id")
+    if series.get("source_root") != ".":
+        raise ValueError(f"{path}: source_root must be relative '.'")
+    _safe_relative(series.get("executable"), f"{path}: executable")
+    for field in (
+        "executable_sha256", "executable_sha256_before", "executable_sha256_after"
+    ):
+        _sha256(series.get(field), f"{path}: {field}")
+    if series.get("executable_sha256") != series.get("executable_sha256_before"):
+        raise ValueError(f"{path}: primary executable hash differs from pre-series hash")
+    _integer(series.get("repeat_count"), f"{path}: repeat_count", minimum=1)
+    _integer(series.get("cooldown_seconds"), f"{path}: cooldown_seconds")
+    _boolean(series.get("diagnostic_only"), f"{path}: diagnostic_only")
+    _boolean(series.get("comparison_ready"), f"{path}: comparison_ready")
+    command = _sequence(series.get("command"), f"{path}: command")
+    if not command or any(not isinstance(value, str) or not value for value in command):
+        raise ValueError(f"{path}: series command is malformed")
+    _safe_relative(command[0], f"{path}: command executable")
+    if series.get("thresholds") != _thresholds():
+        raise ValueError(f"{path}: frozen series thresholds changed")
+    if not isinstance(series.get("timestamp_utc"), str) or not series["timestamp_utc"].endswith("Z"):
+        raise ValueError(f"{path}: series UTC timestamp is missing")
+
+
+def validate_series_path(
+    series_path: Path,
+    runs_dir: Path,
+    *,
+    verify_current_checkout: bool,
+) -> dict[str, Any]:
+    series_path = series_path.resolve()
+    runs_dir = runs_dir.resolve()
+    if series_path.parent != runs_dir:
+        raise ValueError("--series must be directly inside --runs-dir")
+    series = load_json(series_path)
+    _verify_series_shape(series, series_path)
+    records_value = _sequence(series.get("run_files"), f"{series_path}: run_files")
+    if len(records_value) != series["repeat_count"]:
+        raise ValueError(f"{series_path}: run file count differs from repeat count")
+    records = [
+        _validate_raw_record(value, index)
+        for index, value in enumerate(records_value, start=1)
+    ]
+    expected_names = {
+        record[kind] for record in records for kind in ("json", "csv", "log")
+    }
+    actual_names = {
+        path.name for path in runs_dir.iterdir()
+        if re.fullmatch(r"run-[0-9]+\.(?:json|csv|txt)", path.name)
+    }
+    if actual_names != expected_names:
+        missing = sorted(expected_names - actual_names)
+        unexpected = sorted(actual_names - expected_names)
+        raise ValueError(
+            f"{runs_dir}: raw run set changed; missing={missing}, unexpected={unexpected}"
+        )
+
+    runs: list[dict[str, Any]] = []
+    for record in records:
+        for kind in ("json", "csv", "log"):
+            artifact = runs_dir / record[kind]
+            if not artifact.is_file():
+                raise ValueError(f"missing raw benchmark artifact: {artifact}")
+            if sha256_file(artifact) != record[f"{kind}_sha256"]:
+                raise ValueError(f"raw benchmark artifact hash changed: {artifact}")
+        json_path = runs_dir / record["json"]
+        run = load_json(json_path)
+        validate_run(
+            run,
+            json_path,
+            expected_source_id=series["source_id"],
+            require_clean_source=True,
+        )
+        validate_raw_csv(runs_dir / record["csv"], run)
+        runs.append(run)
+
+    correctness = _mapping(series.get("correctness"), f"{series_path}: correctness")
+    if set(correctness) != {"command", "exit_code", "log", "log_sha256"}:
+        raise ValueError(f"{series_path}: correctness evidence fields changed")
+    if correctness.get("command") != FROZEN_CORRECTNESS_COMMAND:
+        raise ValueError(f"{series_path}: correctness command is not frozen")
+    if correctness.get("exit_code") != 0 or correctness.get("log") != "correctness.txt":
+        raise ValueError(f"{series_path}: correctness command did not pass")
+    _sha256(correctness.get("log_sha256"), f"{series_path}: correctness log hash")
+    correctness_path = runs_dir / "correctness.txt"
+    if not correctness_path.is_file() or sha256_file(correctness_path) != correctness["log_sha256"]:
+        raise ValueError(f"{series_path}: correctness log is missing or changed")
+
+    rebuilt = build_series(
+        runs,
+        records,
+        label=series["label"],
+        command=series["command"],
+        correctness=correctness,
+        executable=series["executable"],
+        executable_sha256_before=series["executable_sha256_before"],
+        executable_sha256_after=series["executable_sha256_after"],
+        source_id=series["source_id"],
+        cooldown_seconds=series["cooldown_seconds"],
+        diagnostic_only=series["diagnostic_only"],
+        timestamp_utc=series["timestamp_utc"],
+    )
+    if rebuilt != series:
+        raise ValueError(f"{series_path}: aggregate does not rebuild from raw runs")
+    series_csv_path = runs_dir / "series.csv"
+    if not series_csv_path.is_file():
+        raise ValueError(f"{series_path}: series.csv is missing")
+    if series_csv_path.read_text(encoding="utf-8") != series_csv(series):
+        raise ValueError(f"{series_path}: series.csv does not match rebuilt aggregate")
+
+    if verify_current_checkout:
+        root = repository_root(Path.cwd())
+        verify_checkout(root, series["source_id"])
+        executable = root / series["executable"]
+        if not executable.is_file():
+            raise ValueError(f"{series_path}: benchmark executable is missing: {executable}")
+        if sha256_file(executable) != series["executable_sha256"]:
+            raise ValueError(f"{series_path}: benchmark executable hash changed")
+    return series
+
+
+def validate_series_command(args: argparse.Namespace) -> int:
+    series = validate_series_path(
+        args.series, args.runs_dir, verify_current_checkout=True
+    )
+    print(
+        f"validated {series['repeat_count']} raw runs; "
+        f"qualified={str(series['qualification']['qualified']).lower()}"
+    )
+    return 0 if series["qualification"]["qualified"] else 1
+
+
+def validate_artifact(args: argparse.Namespace) -> int:
+    path = args.artifact.resolve()
+    run = load_json(path)
+    validate_run(run, path)
+    print(f"validated benchmark contract {CONTRACT_VERSION}: {path}")
     return 0
 
 
-def comparable_identity(identity: dict[str, Any]) -> dict[str, Any]:
+def _comparable_identity(identity: dict[str, Any]) -> dict[str, Any]:
+    build = dict(identity["build"])
+    build.pop("source_revision", None)
+    build.pop("source_dirty", None)
     return {
         "benchmarks": identity["benchmarks"],
-        "build": identity["build"],
+        "build": build,
         "config": identity["config"],
         "contract_version": identity["contract_version"],
         "corpus_sha256": identity["corpus_sha256"],
@@ -442,19 +1329,12 @@ def comparable_identity(identity: dict[str, Any]) -> dict[str, Any]:
 
 def comparison_csv(comparison: dict[str, Any]) -> str:
     fields = [
-        "benchmark_id",
-        "targeted",
-        "baseline_median_ns_per_message",
-        "candidate_median_ns_per_message",
-        "median_improvement",
-        "noise_bound",
-        "robust_margin",
-        "regression",
-        "passes_target",
-        "passes_regression",
+        "benchmark_id", "targeted", "baseline_median_ns_per_message",
+        "candidate_median_ns_per_message", "median_improvement", "noise_bound",
+        "robust_margin", "regression", "passes_target", "passes_regression",
         "overall_win",
     ]
-    stream = __import__("io").StringIO(newline="")
+    stream = io.StringIO(newline="")
     writer = csv.DictWriter(stream, fieldnames=fields, lineterminator="\n")
     writer.writeheader()
     for item in comparison["benchmarks"]:
@@ -480,32 +1360,42 @@ def comparison_csv(comparison: dict[str, Any]) -> str:
     return stream.getvalue()
 
 
+def _relative_display(path: Path) -> str:
+    return Path(os.path.relpath(path.resolve(), Path.cwd().resolve())).as_posix()
+
+
 def compare_series(args: argparse.Namespace) -> int:
     baseline_path = args.baseline.resolve()
     candidate_path = args.candidate.resolve()
-    baseline = load_json(baseline_path)
-    candidate = load_json(candidate_path)
-    if not baseline.get("comparison_ready"):
-        raise ValueError(f"baseline series is not comparison-ready: {baseline_path}")
-    if not candidate.get("comparison_ready"):
-        raise ValueError(f"candidate series is not comparison-ready: {candidate_path}")
+    baseline = validate_series_path(
+        baseline_path, baseline_path.parent, verify_current_checkout=False
+    )
+    candidate = validate_series_path(
+        candidate_path, candidate_path.parent, verify_current_checkout=False
+    )
+    if not baseline.get("comparison_ready") or not candidate.get("comparison_ready"):
+        raise ValueError("baseline and candidate must both be qualified series")
     if baseline.get("thresholds") != candidate.get("thresholds"):
         raise ValueError("baseline and candidate threshold contracts differ")
-    if comparable_identity(baseline["identity"]) != comparable_identity(
+    if baseline["source_id"] == candidate["source_id"]:
+        raise ValueError("baseline and candidate source SHAs must be distinct")
+    if baseline["executable_sha256"] == candidate["executable_sha256"]:
+        raise ValueError("baseline and candidate benchmark executable SHAs must be distinct")
+    if _comparable_identity(baseline["identity"]) != _comparable_identity(
         candidate["identity"]
     ):
         raise ValueError(
             "baseline and candidate differ in build, host, config, corpus, "
             "correctness, or benchmark contract"
         )
-    if baseline.get("executable_sha256") == candidate.get("executable_sha256"):
-        raise ValueError("baseline and candidate benchmark executables are identical")
 
     baseline_cases = {item["id"]: item for item in baseline["benchmarks"]}
     candidate_cases = {item["id"]: item for item in candidate["benchmarks"]}
     if baseline_cases.keys() != candidate_cases.keys():
         raise ValueError("baseline and candidate benchmark case sets differ")
-    targets = set(args.target or baseline_cases.keys())
+    targets = set(args.target or ())
+    if not targets:
+        raise ValueError("at least one explicit --target is required")
     unknown_targets = targets - baseline_cases.keys()
     if unknown_targets:
         raise ValueError(
@@ -531,14 +1421,12 @@ def compare_series(args: argparse.Namespace) -> int:
             not targeted
             or (
                 improvement >= MIN_MEDIAN_IMPROVEMENT
-                and max(
-                    before["normalized_mad"], after["normalized_mad"]
-                )
+                and max(before["normalized_mad"], after["normalized_mad"])
                 <= MAX_CROSS_RUN_NORMALIZED_MAD
                 and robust_margin >= MIN_ROBUST_MARGIN
             )
         )
-        passes_regression = regression <= MAX_UNTARGETED_REGRESSION
+        passes_regression = targeted or regression <= MAX_UNTARGETED_REGRESSION
         all_targets_pass = all_targets_pass and passes_target
         all_regressions_pass = all_regressions_pass and passes_regression
         rows.append(
@@ -555,14 +1443,13 @@ def compare_series(args: argparse.Namespace) -> int:
                 "targeted": targeted,
             }
         )
-
     optimization_win = all_targets_pass and all_regressions_pass
     comparison = {
-        "baseline": str(baseline_path),
+        "baseline": _relative_display(baseline_path),
         "baseline_executable_sha256": baseline["executable_sha256"],
         "baseline_source_id": baseline["source_id"],
         "benchmarks": rows,
-        "candidate": str(candidate_path),
+        "candidate": _relative_display(candidate_path),
         "candidate_executable_sha256": candidate["executable_sha256"],
         "candidate_source_id": candidate["source_id"],
         "correctness_equivalent": True,
@@ -579,66 +1466,139 @@ def compare_series(args: argparse.Namespace) -> int:
         canonical_json(args.output_json.resolve(), comparison)
     if args.output_csv:
         atomic_text(args.output_csv.resolve(), comparison_csv(comparison))
-
     print(f"optimization_win={str(optimization_win).lower()}")
     for item in rows:
         marker = "target" if item["targeted"] else "guard"
         print(
-            f"  [{marker}] {item['id']}: "
-            f"improvement={item['median_improvement']:.2%} "
+            f"  [{marker}] {item['id']}: improvement={item['median_improvement']:.2%} "
             f"robust_margin={item['robust_margin']:.2%} "
             f"regression={item['regression']:.2%}"
         )
     return 0 if optimization_win else 1
 
 
+_ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+_SECRET_PATTERNS = (
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{20,}\b"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(
+        r"(?i)\b(api[_-]?key|authorization|password|secret|token)\b"
+        r"(\s*[:=]\s*)([^\s,;]+)"
+    ),
+)
+_TEMP_PATH_RE = re.compile(
+    r"(?<![A-Za-z0-9:])(?:/private/tmp|/tmp|/var/folders)/[^\s'\";,)]*"
+)
+_WINDOWS_HOME_RE = re.compile(r"(?i)[A-Z]:\\Users\\[^\\\s]+")
+
+
+def redact_text(text: str, source_root: Path) -> str:
+    redacted = _ANSI_RE.sub("", text)
+    replacements = {
+        str(source_root.resolve()): "<SOURCE_ROOT>",
+        source_root.resolve().as_posix(): "<SOURCE_ROOT>",
+        str(Path.home().resolve()): "<HOME>",
+        Path.home().resolve().as_posix(): "<HOME>",
+    }
+    for value in sorted((item for item in replacements if item), key=len, reverse=True):
+        redacted = redacted.replace(value, replacements[value])
+        redacted = redacted.replace(value.replace("/", "\\"), replacements[value])
+    redacted = _WINDOWS_HOME_RE.sub("<HOME>", redacted)
+    redacted = _TEMP_PATH_RE.sub("<TEMP_PATH>", redacted)
+    for pattern in _SECRET_PATTERNS:
+        if pattern.groups >= 3:
+            redacted = pattern.sub(lambda match: f"{match.group(1)}{match.group(2)}<REDACTED>", redacted)
+        else:
+            redacted = pattern.sub("<REDACTED>", redacted)
+    return redacted
+
+
+def redact_log(args: argparse.Namespace) -> int:
+    source = args.input.resolve()
+    output = args.output.resolve()
+    root = args.source_root.resolve()
+    if source == output:
+        raise ValueError("redacted output must be separate from the raw input")
+    if not source.is_file():
+        raise ValueError(f"raw log does not exist: {source}")
+    if output.exists():
+        raise ValueError(f"refusing to overwrite redacted log: {output}")
+    original = source.read_text(encoding="utf-8", errors="replace")
+    redacted = redact_text(original, root)
+    for sensitive in (str(root), root.as_posix(), str(Path.home()), Path.home().as_posix()):
+        if sensitive and sensitive in redacted:
+            raise ValueError("redaction left a sensitive absolute path in the output")
+    header = (
+        "# FeedForge benchmark log: mechanically redacted copy\n"
+        "# Review this file manually before publication.\n"
+    )
+    atomic_text(output, header + redacted)
+    print(f"redacted log: {output}")
+    return 0
+
+
 def make_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run and compare the frozen FeedForge benchmark contract"
+        description="Validate, run, and compare FeedForge benchmark contract 2.0"
     )
     subparsers = parser.add_subparsers(dest="subcommand", required=True)
 
     run_parser = subparsers.add_parser(
-        "run", help="collect an independent repeated benchmark series"
+        "run", help="collect the frozen seven-process benchmark series"
     )
     run_parser.add_argument("--executable", required=True, type=Path)
     run_parser.add_argument("--output-dir", required=True, type=Path)
-    run_parser.add_argument("--label", default="baseline")
+    run_parser.add_argument("--label", required=True)
+    run_parser.add_argument("--source-id", required=True)
+    run_parser.add_argument("--repeats", type=int, default=QUALIFIED_REPEATS)
+    run_parser.add_argument("--samples", type=int, default=QUALIFIED_SAMPLES)
+    run_parser.add_argument("--warmup", type=int, default=QUALIFIED_WARMUP)
+    run_parser.add_argument("--batch", type=int, default=QUALIFIED_BATCH)
+    run_parser.add_argument("--min-time-ms", type=float, default=QUALIFIED_MIN_TIME_MS)
     run_parser.add_argument(
-        "--source-id",
-        default="uncommitted-working-tree",
-        help="commit, patch, or other immutable source identifier",
-    )
-    run_parser.add_argument("--repeats", type=int, default=MIN_REPEATS)
-    run_parser.add_argument("--samples", type=int, default=15)
-    run_parser.add_argument("--warmup", type=int, default=5)
-    run_parser.add_argument("--batch", type=int, default=256)
-    run_parser.add_argument("--min-time-ms", type=float, default=50.0)
-    run_parser.add_argument(
-        "--correctness-command",
-        help="external command run once before timing, for example 'ctest --preset bench'",
+        "--cooldown-seconds", type=int, default=QUALIFIED_COOLDOWN_SECONDS
     )
     run_parser.add_argument(
-        "--cwd",
-        type=Path,
-        default=Path.cwd(),
-        help="working directory for correctness and benchmark commands",
+        "--correctness-command", default=shlex.join(FROZEN_CORRECTNESS_COMMAND)
+    )
+    run_parser.add_argument("--cwd", type=Path, default=Path.cwd())
+    run_parser.add_argument(
+        "--allow-unqualified",
+        action="store_true",
+        help="return success for diagnostic output; marks the series non-releasable",
     )
     run_parser.set_defaults(function=run_series)
 
+    validate_parser = subparsers.add_parser(
+        "validate", help="validate one raw benchmark artifact"
+    )
+    validate_parser.add_argument("--artifact", required=True, type=Path)
+    validate_parser.set_defaults(function=validate_artifact)
+
+    series_parser = subparsers.add_parser(
+        "validate-series", help="rebuild a series from its hash-bound raw runs"
+    )
+    series_parser.add_argument("--series", required=True, type=Path)
+    series_parser.add_argument("--runs-dir", required=True, type=Path)
+    series_parser.set_defaults(function=validate_series_command)
+
     compare_parser = subparsers.add_parser(
-        "compare", help="compare baseline and candidate series"
+        "compare", help="compare two independently validated qualified series"
     )
     compare_parser.add_argument("--baseline", required=True, type=Path)
     compare_parser.add_argument("--candidate", required=True, type=Path)
-    compare_parser.add_argument(
-        "--target",
-        action="append",
-        help="benchmark ID declared as an optimization target; default is all",
-    )
+    compare_parser.add_argument("--target", action="append", required=True)
     compare_parser.add_argument("--output-json", type=Path)
     compare_parser.add_argument("--output-csv", type=Path)
     compare_parser.set_defaults(function=compare_series)
+
+    redact_parser = subparsers.add_parser(
+        "redact-log", help="write a separate mechanically redacted public log copy"
+    )
+    redact_parser.add_argument("--input", required=True, type=Path)
+    redact_parser.add_argument("--output", required=True, type=Path)
+    redact_parser.add_argument("--source-root", required=True, type=Path)
+    redact_parser.set_defaults(function=redact_log)
     return parser
 
 
