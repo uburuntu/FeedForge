@@ -132,14 +132,14 @@ endif()
 
 run_expected_failure(
   "previous pre-1.0 minor package request"
-  "compatible with requested version \"0.4\""
+  "compatible with requested version \"0.5\""
   "${CMAKE_COMMAND}"
   -S "${CONSUMER_SOURCE_DIR}"
   -B "${WORK_DIR}/incompatible-version-build"
   -G "${GENERATOR}"
   "-DCMAKE_CXX_COMPILER=${CXX_COMPILER}"
   "-DCMAKE_PREFIX_PATH=${_prefix}"
-  -DFEEDFORGE_REQUEST_VERSION=0.4
+  -DFEEDFORGE_REQUEST_VERSION=0.5
 )
 
 set(_consumer_build "${WORK_DIR}/consumer-build")
@@ -151,7 +151,7 @@ set(_consumer_configure_args
     -DCMAKE_CXX_STANDARD=20
     -DCMAKE_CXX_EXTENSIONS=OFF
     "-DCMAKE_PREFIX_PATH=${_prefix}"
-    -DFEEDFORGE_REQUEST_VERSION=0.5
+    -DFEEDFORGE_REQUEST_VERSION=0.6
     "-DFEEDFORGE_CONSUMER_KIND=${KIND}")
 if(KIND STREQUAL "canonical")
   list(
