@@ -34,9 +34,11 @@ jobs:
           build-mode: manual
           languages: c-cpp
           queries: security-extended
-      - name: Build compiler, runtime, generated code, and tests
+      - name: Build compiler, runtime, generated code, benchmarks, and tests
         run: |
-          cmake --preset dev -DFEEDFORGE_WARNINGS_AS_ERRORS=ON
+          cmake --preset dev \
+            -DFEEDFORGE_BUILD_BENCHMARKS=ON \
+            -DFEEDFORGE_WARNINGS_AS_ERRORS=ON
           cmake --build --preset dev --parallel 2
       - name: Analyze
         uses: github/codeql-action/analyze@7188fc363630916deb702c7fdcf4e481b751f97a # v4.37.1

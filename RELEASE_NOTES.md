@@ -37,8 +37,9 @@ candidate must also pass the complete local verification matrix.
 
 Retained timing must run on an otherwise idle, cooled host on AC power. The
 runner waits 120 seconds after its captured correctness gate. macOS evidence
-records the pre/post battery source, power configuration, and thermal status and
-preserves the platform's lack of supported process affinity as a limitation.
+requires Automatic/legacy-off power mode 0 and records the pre/post battery
+source, power configuration, and thermal status. Endpoint snapshots do not
+prove uninterrupted AC power, and macOS lacks supported process affinity.
 
 The GitHub release carries reviewed individual raw JSON and CSV, aggregate
 series, redacted public correctness and qualification logs, pre/post host-state

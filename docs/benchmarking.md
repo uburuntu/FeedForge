@@ -113,18 +113,24 @@ Retain exactly seven independent processes. Every run must be non-implausible
 and non-noisy, and every one of the 16 cases must have cross-run MAD/median at
 most 3%. `benchmark.py run` fails qualification by default; diagnostic output
 requires the explicit `--allow-unqualified` escape hatch and is not releasable.
+The aggregate's `qualification.qualified` field covers these frozen series
+checks only. Release qualification additionally requires the phase-one
+verification and pre/post host-state gates described here.
 
 Do not select seven quiet runs from a larger attempt. If any gate fails, reject
 the complete attempt, preserve its identity and reason, correct the environment,
 and run seven fresh processes into a new empty directory. Thresholds and cases
 must not change in response to results.
 
-Use an otherwise idle host on AC power. On macOS, Low Power Mode must be off and
-the machine must cool before collection; macOS has no supported process
+Use an otherwise idle host on AC power. On macOS, the AC profile must use frozen
+Automatic/legacy-off power mode 0 and the machine must cool before collection;
+macOS has no supported process
 affinity API and may move work between heterogeneous cores. Preserve pre- and
 post-series output for AC/battery state, power-mode configuration, and thermal
 status, including `pmset -g batt`, `pmset -g custom`, and `pmset -g therm`. If
 those conditions or records are unavailable, do not retain the timing series.
+The endpoint snapshots cannot prove uninterrupted AC power during collection;
+polling during timed samples is deliberately avoided because it can perturb them.
 
 ## Commands
 

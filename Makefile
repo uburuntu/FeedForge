@@ -541,8 +541,8 @@ bench-run: ## Collect a frozen series; requires BENCH_LABEL and BENCH_SOURCE_ID
 	case "$(BENCH_LABEL)" in ''|*[!A-Za-z0-9._-]*) \
 		printf 'BENCH_LABEL must match [A-Za-z0-9._-]+\n' >&2; exit 2 ;; esac; \
 	test -n "$(BENCH_SOURCE_ID)" || { printf 'Set BENCH_SOURCE_ID to an immutable revision.\n' >&2; exit 2; }; \
-	if test -n "$${CI:-}" && test "$(FORCE)" != 1; then \
-		printf 'Refusing timing under CI; use FORCE=1 only for an intentional run.\n' >&2; exit 2; \
+	if test -n "$${CI:-}"; then \
+		printf 'Refusing benchmark timing under CI.\n' >&2; exit 2; \
 	fi; \
 	if test -d "$(BENCH_OUTPUT_DIR)" && test -n "$$(find "$(BENCH_OUTPUT_DIR)" -mindepth 1 -print -quit)"; then \
 		printf 'Benchmark output already exists: %s\n' "$(BENCH_OUTPUT_DIR)" >&2; exit 2; \
@@ -550,25 +550,63 @@ bench-run: ## Collect a frozen series; requires BENCH_LABEL and BENCH_SOURCE_ID
 	if test -d "$(BENCH_EVIDENCE_DIR)" && test -n "$$(find "$(BENCH_EVIDENCE_DIR)" -mindepth 1 -print -quit)"; then \
 		printf 'Benchmark evidence already exists: %s\n' "$(BENCH_EVIDENCE_DIR)" >&2; exit 2; \
 	fi; \
-	if test "$(UNAME_S)" = Darwin; then \
+	host_os="$$(uname -s)"; \
+	if test "$$host_os" = Darwin; then \
 		command -v pmset >/dev/null 2>&1 || { printf 'pmset is required for macOS evidence.\n' >&2; exit 2; }; \
-		pmset -g batt | grep -Fq 'AC Power' || { \
-			printf 'Refusing benchmark timing without AC power.\n' >&2; exit 2; }; \
 		printf 'Note: macOS has no supported process-affinity control; preserve this caveat.\n'; \
 	fi
 	+@$(MAKE) --no-print-directory bench-smoke
 	@$(CMAKE) -E make_directory "$(BENCH_EVIDENCE_DIR)"
 	@set -eu; \
-	record_host() { \
-		date -u '+%Y-%m-%dT%H:%M:%SZ'; \
-		uname -srvmp; \
-		if test "$(UNAME_S)" = Darwin; then \
-			pmset -g batt | sed -E 's/\(id=[0-9]+\)/(id=<redacted>)/'; \
-			pmset -g custom; pmset -g therm; \
+	host_os="$$(uname -s)"; \
+	captured_batt=; captured_custom=; captured_therm=; \
+	capture_host() { \
+		destination="$$1"; \
+		timestamp="$$(date -u '+%Y-%m-%dT%H:%M:%SZ')" || return 1; \
+		kernel="$$(uname -srvmp)" || return 1; \
+		if test "$$host_os" = Darwin; then \
+			if ! captured_batt="$$(pmset -g batt)"; then \
+				printf 'Unable to capture macOS battery state.\n' >&2; return 1; \
+			fi; \
+			if ! captured_custom="$$(pmset -g custom)"; then \
+				printf 'Unable to capture macOS power configuration.\n' >&2; return 1; \
+			fi; \
+			if ! captured_therm="$$(pmset -g therm)"; then \
+				printf 'Unable to capture macOS thermal state.\n' >&2; return 1; \
+			fi; \
+		fi; \
+		{ \
+			printf '%s\n%s\n' "$$timestamp" "$$kernel"; \
+			if test "$$host_os" = Darwin; then \
+				printf '%s\n' "$$captured_batt" | sed -E 's/\(id=[^)]+\)/(id=<redacted>)/g'; \
+				printf '%s\n%s\n' "$$captured_custom" "$$captured_therm"; \
+			fi; \
+		} > "$$destination" || return 1; \
+	}; \
+	require_host_state() { \
+		if test "$$host_os" = Darwin; then \
+			if ! printf '%s\n' "$$captured_batt" | grep -Fxq "Now drawing from 'AC Power'"; then \
+				printf 'Refusing benchmark timing without AC power.\n' >&2; return 1; \
+			fi; \
+			if ! power_mode="$$(printf '%s\n' "$$captured_custom" | awk '\
+				/^[[:space:]]*AC Power:[[:space:]]*$$/ { in_ac = 1; next } \
+				/^[[:space:]]*(Battery|UPS) Power:[[:space:]]*$$/ { in_ac = 0; next } \
+				in_ac && ($$1 == "lowpowermode" || $$1 == "powermode") { \
+					count++; key = $$1; value = $$2 \
+				} \
+				END { if (count != 1) exit 2; print key "=" value }')"; then \
+				printf 'Unable to identify one macOS AC power-mode setting.\n' >&2; return 1; \
+			fi; \
+			case "$$power_mode" in lowpowermode=0|powermode=0) ;; *) \
+				printf 'Refusing benchmark timing unless the macOS AC profile uses frozen Automatic/legacy-off mode 0.\n' >&2; return 1 ;; \
+			esac; \
 		fi; \
 	}; \
-	record_host > "$(BENCH_EVIDENCE_DIR)/host-before.txt"; \
-	rc=0; \
+	pre_rc=0; \
+	capture_host "$(BENCH_EVIDENCE_DIR)/host-before.txt" || pre_rc=2; \
+	if test "$$pre_rc" -eq 0; then require_host_state || pre_rc=2; fi; \
+	test "$$pre_rc" -eq 0 || exit "$$pre_rc"; \
+	run_rc=0; \
 	$(PYTHON) benchmarks/benchmark.py run \
 		--executable "$(BENCH_EXECUTABLE)" \
 		--output-dir "$(BENCH_OUTPUT_DIR)" \
@@ -576,16 +614,22 @@ bench-run: ## Collect a frozen series; requires BENCH_LABEL and BENCH_SOURCE_ID
 		--source-id "$(BENCH_SOURCE_ID)" \
 		--correctness-command "$(BENCH_CORRECTNESS_COMMAND)" \
 		--cooldown-seconds "$(BENCH_COOLDOWN_SECONDS)" \
-		--cwd "$(ROOT)" || rc=$$?; \
-	record_host > "$(BENCH_EVIDENCE_DIR)/host-after.txt"; \
-	exit "$$rc"
+		--cwd "$(ROOT)" || run_rc=$$?; \
+	post_rc=0; \
+	capture_host "$(BENCH_EVIDENCE_DIR)/host-after.txt" || post_rc=2; \
+	if test "$$post_rc" -eq 0; then require_host_state || post_rc=2; fi; \
+	test "$$run_rc" -eq 0 || exit "$$run_rc"; \
+	test "$$post_rc" -eq 0 || { \
+		printf 'Rejecting the complete timing attempt because host power state changed.\n' >&2; exit "$$post_rc"; \
+	}
 	+@$(MAKE) --no-print-directory bench-validate
 	+@$(MAKE) --no-print-directory bench-redact-log
 
 bench-validate: ## Rebuild and validate a series from all raw run JSON files
 	@$(PYTHON) benchmarks/benchmark.py validate-series \
 		--series "$(BENCH_SERIES)" \
-		--runs-dir "$(BENCH_RUNS_DIR)"
+		--runs-dir "$(BENCH_RUNS_DIR)" \
+		--verify-checkout
 
 bench-redact-log: ## Create a separate privacy-reviewed public correctness log
 	@set -eu; \

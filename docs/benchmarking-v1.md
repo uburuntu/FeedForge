@@ -5,6 +5,10 @@ results are engineering evidence, not a product performance claim. Changing a
 workload, metric, threshold, or measurement rule requires a new contract version
 and fresh baselines.
 
+This is an archived contract. Its commands and `benchmarks/benchmark.py`
+interface apply to the [v0.5.0 source revision](https://github.com/uburuntu/FeedForge/tree/v0.5.0),
+not current `main`; current source implements contract 2.0.0.
+
 ## Scope and invariants
 
 The harness measures the committed `portable_checked` generated code only. It

@@ -59,9 +59,9 @@ substitute for independently reviewed wire bytes.
 
 Correctness comes first. Performance changes must follow
 [docs/benchmarking.md](docs/benchmarking.md), preserve all semantics, and avoid
-public claims without the required holdout confirmation. Benchmark artifacts
-belong under ignored build/output directories unless a review explicitly
-requires a durable external artifact.
+public claims without the contract's qualification and claim-boundary gates.
+Benchmark artifacts belong under ignored build/output directories unless a
+review explicitly requires a durable external artifact.
 
 ## Pull requests
 

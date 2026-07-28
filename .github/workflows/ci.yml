@@ -277,12 +277,15 @@ jobs:
         run: |
           python3 - <<'PY'
           import json
+          import os
           from pathlib import Path
 
           artifact = json.loads(
               Path("build/bench/benchmark-smoke.json").read_text(encoding="utf-8")
           )
           assert artifact["contract_version"] == "2.0.0"
+          assert artifact["build"]["source_revision"] == os.environ["GITHUB_SHA"]
+          assert artifact["build"]["source_dirty"] is False
           assert artifact["config"]["smoke"] is True
           assert artifact["publishable"] is False
           assert len(artifact["benchmarks"]) == 16

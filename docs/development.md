@@ -194,9 +194,9 @@ make bench-run \
   BENCH_COOLDOWN_SECONDS=120
 ```
 
-On macOS the target requires AC power. Preserve pre/post `pmset` power and
-thermal records in `BENCH_EVIDENCE_DIR`, then revalidate the aggregate against
-all seven raw runs:
+On macOS the target requires AC power and Automatic/legacy-off power mode 0 at
+both endpoints. Preserve the pre/post `pmset` power and thermal records in
+`BENCH_EVIDENCE_DIR`, then revalidate the aggregate against all seven raw runs:
 
 ```sh
 python3 benchmarks/benchmark.py validate-series \
