@@ -54,6 +54,69 @@ SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 REVISION_RE = re.compile(r"[0-9a-f]{40}\Z")
 LABEL_RE = re.compile(r"[A-Za-z0-9._-]+\Z")
 CHECKSUM_RE = re.compile(r"0x[0-9a-f]+\Z")
+UTC_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\Z")
+RUN_KEYS = {
+    "benchmarks", "build", "command", "config", "contract_version", "corpus",
+    "correctness", "host", "publishable", "schema_version", "timestamp_utc",
+    "warnings",
+}
+BUILD_KEYS = {
+    "build_type", "compiler_builtin", "compiler_id", "compiler_path",
+    "compiler_version", "config_flags", "cxx_standard", "feedforge_version",
+    "generator", "interprocedural_optimization", "pipeline_fingerprints",
+    "schema_fingerprint", "source_dirty", "source_revision", "target_flags",
+}
+CONFIG_KEYS = {
+    "batch", "clock", "clock_is_steady", "minimum_time_ms", "samples", "smoke",
+    "timer_resolution_ns", "warmup",
+}
+CORPUS_KEYS = {"fixture_count", "fixtures", "sha256", "source"}
+FIXTURE_KEYS = {
+    "byte_source", "file", "message_name", "message_type",
+    "order_events_selected", "review_status", "reviewer", "sha256", "size",
+}
+HOST_KEYS = {
+    "architecture", "cpu_affinity", "cpu_governor", "cpu_model", "kernel",
+    "limitations", "logical_cpus", "machine_model", "memory_bytes", "os",
+    "physical_cpus", "turbo_state",
+}
+COMMAND_KEYS = {"argv", "joined", "working_directory"}
+SERIES_KEYS = {
+    "benchmarks", "command", "comparison_ready", "contract_version",
+    "cooldown_seconds", "correctness", "diagnostic_only", "executable",
+    "executable_sha256", "executable_sha256_after", "executable_sha256_before",
+    "identity", "label", "qualification", "repeat_count", "run_files",
+    "schema_version", "source_id", "source_root", "thresholds", "timestamp_utc",
+    "warnings",
+}
+FROZEN_REVIEWER = "independent-line-by-line-protocol-review"
+FROZEN_REVIEW_STATUS = "approved"
+FROZEN_BYTE_SOURCE = "hand-authored from the cited official field table; not schema-generated"
+FROZEN_FIXTURES = (
+    ("01_system_event.toml", "system_event", "S", False, "4518bcf87627f16ecd98ba40b4839be8f23e55df95b79fd97bb7c59c99f25ced", 12),
+    ("02_stock_directory.toml", "stock_directory", "R", False, "f3220f7e0e59bc7b5c7acc451d986bc9359b08db605a807d7043cb1f3e37b182", 39),
+    ("03_stock_trading_action.toml", "stock_trading_action", "H", False, "0a34e58508645a63fa737996259842ef14e5152fadd26a38165fe41710bbe2db", 25),
+    ("04_reg_sho_restriction.toml", "reg_sho_restriction", "Y", False, "8a5a3a23f33734af03481f35eb72ef33e67e554c910e30be45cbfaafecc66001", 20),
+    ("05_market_participant_position.toml", "market_participant_position", "L", False, "c957f930baf7436fec759e8d07af19dd9b90f3edb4aa76ab2ce06502c9a59b63", 26),
+    ("06_mwcb_decline_level.toml", "mwcb_decline_level", "V", False, "4b7be692ce5c44added70d3f4b5b399fbe70259c37c6fe095176632dcf035c99", 35),
+    ("07_mwcb_status.toml", "mwcb_status", "W", False, "e934ec3d72a69db9fd30d37a6762b1a39aae92e8977451f56c90863fb70321d6", 12),
+    ("08_ipo_quoting_period_update.toml", "ipo_quoting_period_update", "K", False, "1393a91cb0cd826845b3cd62f3cefc1a2c8666823d56239e81c52730e64e787e", 28),
+    ("09_luld_auction_collar.toml", "luld_auction_collar", "J", False, "fcbf7aac3d7e13395e657937e94623054a705b8a0639d6bd6f10ba06254a9b2a", 35),
+    ("10_operational_halt.toml", "operational_halt", "h", False, "9276cb5ca72437ecc0383077a0671ea035ab7ae19c46344b8ae45e3350288f93", 21),
+    ("11_add_order.toml", "add_order", "A", True, "c570f28d4a11703971c42c430f5601f57d2beccd48edd91c6ce795d054a61346", 36),
+    ("12_add_order_mpid.toml", "add_order_mpid", "F", True, "1d9aec218b29b59155ed1b2d037129837f699d65cc1a51b1726906bceb45bef5", 40),
+    ("13_order_executed.toml", "order_executed", "E", True, "872809dd86966116e1a55880d6b94d0d96c29ab0e5329512d33712c46224b1c7", 31),
+    ("14_order_executed_with_price.toml", "order_executed_with_price", "C", True, "4031eeca1bb2f8e9ae3f74a49ccc13a7cbb775d83338d15897548bbb176bccf6", 36),
+    ("15_order_cancel.toml", "order_cancel", "X", True, "de401784533ea228602b2b3ca8d515e3141f2b07a6cd4983f4c5c49df45b574c", 23),
+    ("16_order_delete.toml", "order_delete", "D", True, "1d6d0020bbfc468dea4ee0bd6b243d91e4231c3e6773294f171bc1ab4d2593ea", 19),
+    ("17_order_replace.toml", "order_replace", "U", True, "ea62148c2591932844ecedd3d85f61cefe0afcae4d328ecc252726d5a9a1765a", 35),
+    ("18_trade.toml", "trade", "P", True, "d1546edc619ae239974736264684fbbef8474948d2eaf00a2c0b9853014053a7", 44),
+    ("19_cross_trade.toml", "cross_trade", "Q", False, "b18502cee513cd26336ebc9a0994d8259df9705b088ab7612ec5aa799ec41d3e", 40),
+    ("20_broken_trade.toml", "broken_trade", "B", False, "4dffefbd1c977615b47f7392e38539580468bcc64128784457cbfa418c610c3c", 19),
+    ("21_net_order_imbalance_indicator.toml", "net_order_imbalance_indicator", "I", False, "92dd216354057b0417148e15ed84a8bb8829b497aea5ab328f6ff79ea10aa0e4", 50),
+    ("22_retail_price_improvement_indicator.toml", "retail_price_improvement_indicator", "N", False, "7224c96373031b8f1bb8f3d205ea4c13570f159528952776c4ff0da57a3722cf", 20),
+    ("23_direct_listing_with_capital_raise.toml", "direct_listing_with_capital_raise", "O", False, "fdf315dcd2fc4558ea1e0936139726485f9419e9571a419eceed4aff03910352", 48),
+)
 
 
 def _case(
@@ -305,6 +368,27 @@ def _safe_relative(value: Any, context: str) -> str:
     return path.as_posix()
 
 
+def join_command(arguments: Sequence[str]) -> str:
+    simple = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./:-=")
+    output = []
+    for argument in arguments:
+        if argument and all(character in simple for character in argument):
+            output.append(argument)
+        else:
+            output.append("'" + argument.replace("'", "'\\''") + "'")
+    return " ".join(output)
+
+
+def _utc_timestamp(value: Any, context: str) -> str:
+    if not isinstance(value, str) or not UTC_RE.fullmatch(value):
+        raise ValueError(f"{context}: expected RFC3339 UTC seconds ending in Z")
+    try:
+        dt.datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError as error:
+        raise ValueError(f"{context}: invalid RFC3339 UTC timestamp") from error
+    return value
+
+
 def _relative_path(path: Path, root: Path, context: str) -> str:
     try:
         relative = path.resolve().relative_to(root.resolve())
@@ -330,13 +414,21 @@ def _forbidden_isa_flags(build: dict[str, Any]) -> list[str]:
         r"lwp|lzcnt|mmx|movbe|movdir|mpx|neon|outline-atomics|pclmul|pconfig|"
         r"pku|popcnt|power|prefetch|prfchw|ptwrite|ras|rcpc|rdpid|rdrnd|rdseed|"
         r"rtm|rvv|serialize|sgx|sha|shstk|simd|sse|sve|tbm|tsx|uintr|vaes|"
-        r"vector|vpclmul|vsx|waitpkg|wbnoinvd|xop|xsave|zvector)(?:[=+-].*)?\Z",
+        r"vector|vpclmul|vsx|waitpkg|wbnoinvd|xop|xsave|zvector)(?:[0-9._=+-].*)?\Z",
         re.IGNORECASE,
     )
     rejected: list[str] = []
     lowered = [token.lower() for token in tokens]
     for index, token in enumerate(lowered):
         if token.startswith(prefixes) or feature_re.fullmatch(token):
+            rejected.append(tokens[index])
+        if (
+            token.startswith(("-flto", "-qipa", "-xipo"))
+            or (token.startswith("-ipo") and token not in {"-ipo-", "-no-ipo"})
+            or token == "/gl"
+            or (token.startswith("/ltcg") and token != "/ltcg:off")
+            or (token.startswith("-wl,") and ("-flto" in token or "-plugin-opt" in token))
+        ):
             rejected.append(tokens[index])
         if token in {"-mllvm", "-xclang"} and index + 1 < len(tokens):
             following = lowered[index + 1]
@@ -448,6 +540,8 @@ def _validate_build(
     require_clean_source: bool,
 ) -> dict[str, Any]:
     build = _mapping(build_value, f"{path}: build")
+    if set(build) != BUILD_KEYS:
+        raise ValueError(f"{path}: build fields changed")
     required_text = (
         "build_type", "compiler_builtin", "compiler_id", "compiler_path",
         "compiler_version", "config_flags", "feedforge_version", "generator",
@@ -457,7 +551,11 @@ def _validate_build(
     for key in required_text:
         if not isinstance(build.get(key), str) or not build[key]:
             raise ValueError(f"{path}: build.{key} is missing")
-    _integer(build.get("cxx_standard"), f"{path}: build.cxx_standard", minimum=202002)
+    cxx_standard = _integer(
+        build.get("cxx_standard"), f"{path}: build.cxx_standard", minimum=202002
+    )
+    if cxx_standard != 202002:
+        raise ValueError(f"{path}: benchmark build must use the frozen C++20 mode")
     _boolean(build.get("source_dirty"), f"{path}: build.source_dirty")
     _revision(build.get("source_revision"), f"{path}: build.source_revision")
     if build.get("build_type") != "Release":
@@ -473,7 +571,7 @@ def _validate_build(
     rejected = _forbidden_isa_flags(build)
     if rejected:
         raise ValueError(
-            f"{path}: CPU-specific ISA/tuning flag is forbidden: "
+            f"{path}: CPU-specific ISA/tuning or explicit LTO flag is forbidden: "
             + " ".join(rejected)
         )
     if expected_source_id is not None and build.get("source_revision") != expected_source_id:
@@ -485,6 +583,8 @@ def _validate_build(
 
 def _validate_corpus(corpus_value: Any, path: Path) -> None:
     corpus = _mapping(corpus_value, f"{path}: corpus")
+    if set(corpus) != CORPUS_KEYS:
+        raise ValueError(f"{path}: corpus fields changed")
     if corpus.get("sha256") != CORPUS_SHA256:
         raise ValueError(f"{path}: frozen corpus hash changed")
     if corpus.get("fixture_count") != 23:
@@ -494,24 +594,32 @@ def _validate_corpus(corpus_value: Any, path: Path) -> None:
     fixtures = _sequence(corpus.get("fixtures"), f"{path}: corpus.fixtures")
     if len(fixtures) != 23:
         raise ValueError(f"{path}: corpus fixture list must contain 23 entries")
-    files: list[str] = []
-    for index, fixture_value in enumerate(fixtures, start=1):
+    for index, (fixture_value, frozen) in enumerate(
+        zip(fixtures, FROZEN_FIXTURES), start=1
+    ):
         fixture = _mapping(fixture_value, f"{path}: fixture {index}")
-        for field in ("byte_source", "file", "message_name", "message_type",
-                      "review_status", "reviewer"):
-            if not isinstance(fixture.get(field), str) or not fixture[field]:
-                raise ValueError(f"{path}: fixture {index} lacks {field}")
-        _boolean(fixture.get("order_events_selected"),
-                 f"{path}: fixture {index}.order_events_selected")
-        _sha256(fixture.get("sha256"), f"{path}: fixture {index}.sha256")
-        _integer(fixture.get("size"), f"{path}: fixture {index}.size", minimum=1)
-        files.append(fixture["file"])
-    if len(set(files)) != 23 or files != sorted(files):
-        raise ValueError(f"{path}: fixture files are duplicated or out of order")
+        if set(fixture) != FIXTURE_KEYS:
+            raise ValueError(f"{path}: fixture {index} fields changed")
+        file_name, message_name, message_type, selected, digest, size = frozen
+        expected = {
+            "byte_source": FROZEN_BYTE_SOURCE,
+            "file": file_name,
+            "message_name": message_name,
+            "message_type": message_type,
+            "order_events_selected": selected,
+            "review_status": FROZEN_REVIEW_STATUS,
+            "reviewer": FROZEN_REVIEWER,
+            "sha256": digest,
+            "size": size,
+        }
+        if fixture != expected:
+            raise ValueError(f"{path}: frozen fixture {index} review metadata changed")
 
 
 def _validate_command(command_value: Any, path: Path) -> None:
     command = _mapping(command_value, f"{path}: command")
+    if set(command) != COMMAND_KEYS:
+        raise ValueError(f"{path}: command fields changed")
     arguments = _sequence(command.get("argv"), f"{path}: command.argv")
     if not arguments or any(not isinstance(item, str) or not item for item in arguments):
         raise ValueError(f"{path}: command argv is empty or malformed")
@@ -519,6 +627,8 @@ def _validate_command(command_value: Any, path: Path) -> None:
         raise ValueError(f"{path}: benchmark working directory must be relative '.'")
     if not isinstance(command.get("joined"), str) or not command["joined"]:
         raise ValueError(f"{path}: joined benchmark command is missing")
+    if command["joined"] != join_command(arguments):
+        raise ValueError(f"{path}: joined benchmark command does not match argv")
     for index, argument in enumerate(arguments):
         if index == 0 or (index > 0 and arguments[index - 1] in {"--json", "--csv"}):
             _safe_relative(argument, f"{path}: command argv[{index}]")
@@ -531,6 +641,8 @@ def validate_run(
     expected_source_id: str | None = None,
     require_clean_source: bool = False,
 ) -> None:
+    if set(run) != RUN_KEYS:
+        raise ValueError(f"{path}: top-level result fields changed")
     if run.get("schema_version") != RESULT_SCHEMA_VERSION:
         raise ValueError(f"{path}: unsupported result schema")
     if run.get("contract_version") != CONTRACT_VERSION:
@@ -544,6 +656,8 @@ def validate_run(
         run.get("build"), path, expected_source_id, require_clean_source
     )
     config = _mapping(run.get("config"), f"{path}: config")
+    if set(config) != CONFIG_KEYS:
+        raise ValueError(f"{path}: config fields changed")
     if config.get("clock") != "std::chrono::steady_clock":
         raise ValueError(f"{path}: unexpected benchmark clock")
     if config.get("clock_is_steady") is not True:
@@ -560,17 +674,19 @@ def validate_run(
         raise ValueError(f"{path}: steady-clock resolution is too coarse")
     _validate_command(run.get("command"), path)
     host = _mapping(run.get("host"), f"{path}: host")
+    if set(host) != HOST_KEYS:
+        raise ValueError(f"{path}: host fields changed")
     for field in ("architecture", "cpu_affinity", "cpu_governor", "cpu_model",
                   "kernel", "machine_model", "os", "turbo_state"):
         if not isinstance(host.get(field), str) or not host[field]:
             raise ValueError(f"{path}: host.{field} is missing")
-    for field in ("logical_cpus", "physical_cpus", "memory_bytes"):
-        _integer(host.get(field), f"{path}: host.{field}", minimum=1)
+    _integer(host.get("logical_cpus"), f"{path}: host.logical_cpus", minimum=1)
+    for field in ("physical_cpus", "memory_bytes"):
+        _integer(host.get(field), f"{path}: host.{field}")
     limitations = _sequence(host.get("limitations"), f"{path}: host.limitations")
     if any(not isinstance(item, str) or not item for item in limitations):
         raise ValueError(f"{path}: host limitations are malformed")
-    if not isinstance(run.get("timestamp_utc"), str) or not run["timestamp_utc"].endswith("Z"):
-        raise ValueError(f"{path}: UTC timestamp is missing")
+    _utc_timestamp(run.get("timestamp_utc"), f"{path}: timestamp_utc")
     warnings = _sequence(run.get("warnings"), f"{path}: warnings")
     if any(not isinstance(item, str) or not item for item in warnings):
         raise ValueError(f"{path}: top-level warnings are malformed")
@@ -581,6 +697,11 @@ def validate_run(
     for index, (item_value, expected) in enumerate(zip(benchmarks, FROZEN_CASES)):
         item = _mapping(item_value, f"{path}: benchmark {index + 1}")
         identifier = expected["id"]
+        if set(item) != set(expected) | {
+            "anti_elision_checksum", "quality", "rounds_per_sample", "samples",
+            "statistics",
+        }:
+            raise ValueError(f"{path}: {identifier} benchmark fields changed")
         for field, expected_value in expected.items():
             if item.get(field) != expected_value:
                 raise ValueError(
@@ -760,6 +881,8 @@ def validate_raw_csv(path: Path, run: dict[str, Any]) -> None:
         "relative_p95_p05_spread",
     }
     for index, (row, item) in enumerate(zip(rows, run["benchmarks"]), start=1):
+        if None in row or set(row) != set(RAW_CSV_FIELDS):
+            raise ValueError(f"{path}: row {index} has extra or missing cells")
         expected = _raw_csv_expected(run, item)
         for field in RAW_CSV_FIELDS:
             actual = row[field]
@@ -1038,6 +1161,18 @@ def run_series(args: argparse.Namespace) -> int:
         raise ValueError("repeat, sample, warmup, and batch counts must be positive")
     if args.min_time_ms <= 0.0 or args.cooldown_seconds < 0:
         raise ValueError("sample time must be positive and cooldown must be nonnegative")
+    requested_contract_exact = (
+        args.repeats == QUALIFIED_REPEATS
+        and args.samples == QUALIFIED_SAMPLES
+        and args.warmup == QUALIFIED_WARMUP
+        and args.batch == QUALIFIED_BATCH
+        and args.min_time_ms == QUALIFIED_MIN_TIME_MS
+        and args.cooldown_seconds == QUALIFIED_COOLDOWN_SECONDS
+    )
+    if not requested_contract_exact and not args.allow_unqualified:
+        raise ValueError(
+            "non-frozen measurement settings require --allow-unqualified"
+        )
     correctness_command = shlex.split(args.correctness_command)
     if correctness_command != FROZEN_CORRECTNESS_COMMAND:
         raise ValueError("--correctness-command is frozen as 'make bench-correctness'")
@@ -1053,7 +1188,7 @@ def run_series(args: argparse.Namespace) -> int:
         check=False,
     )
     correctness_path = output_dir / "correctness.txt"
-    atomic_text(correctness_path, completed.stdout)
+    atomic_text(correctness_path, redact_text(completed.stdout, root))
     if completed.returncode != 0:
         raise RuntimeError(
             f"correctness command failed with exit code {completed.returncode}; "
@@ -1095,7 +1230,7 @@ def run_series(args: argparse.Namespace) -> int:
             check=False,
         )
         log_path = output_dir / f"{stem}.txt"
-        atomic_text(log_path, completed.stdout)
+        atomic_text(log_path, redact_text(completed.stdout, root))
         if completed.returncode != 0:
             raise RuntimeError(
                 f"{stem} failed with exit code {completed.returncode}; see {log_path}"
@@ -1129,6 +1264,9 @@ def run_series(args: argparse.Namespace) -> int:
     )
     canonical_json(output_dir / "series.json", series)
     atomic_text(output_dir / "series.csv", series_csv(series))
+    validate_series_path(
+        output_dir / "series.json", output_dir, verify_current_checkout=True
+    )
     print()
     print(
         f"{args.label}: {len(runs)} repeats; "
@@ -1165,6 +1303,8 @@ def _validate_raw_record(record_value: Any, index: int) -> dict[str, str]:
 
 
 def _verify_series_shape(series: dict[str, Any], path: Path) -> None:
+    if set(series) != SERIES_KEYS:
+        raise ValueError(f"{path}: top-level series fields changed")
     if series.get("schema_version") != SERIES_SCHEMA_VERSION:
         raise ValueError(f"{path}: unsupported series schema")
     if series.get("contract_version") != CONTRACT_VERSION:
@@ -1191,8 +1331,7 @@ def _verify_series_shape(series: dict[str, Any], path: Path) -> None:
     _safe_relative(command[0], f"{path}: command executable")
     if series.get("thresholds") != _thresholds():
         raise ValueError(f"{path}: frozen series thresholds changed")
-    if not isinstance(series.get("timestamp_utc"), str) or not series["timestamp_utc"].endswith("Z"):
-        raise ValueError(f"{path}: series UTC timestamp is missing")
+    _utc_timestamp(series.get("timestamp_utc"), f"{path}: timestamp_utc")
 
 
 def validate_series_path(
@@ -1236,6 +1375,7 @@ def validate_series_path(
                 raise ValueError(f"missing raw benchmark artifact: {artifact}")
             if sha256_file(artifact) != record[f"{kind}_sha256"]:
                 raise ValueError(f"raw benchmark artifact hash changed: {artifact}")
+        _validate_publishable_log(runs_dir / record["log"])
         json_path = runs_dir / record["json"]
         run = load_json(json_path)
         validate_run(
@@ -1258,6 +1398,7 @@ def validate_series_path(
     correctness_path = runs_dir / "correctness.txt"
     if not correctness_path.is_file() or sha256_file(correctness_path) != correctness["log_sha256"]:
         raise ValueError(f"{series_path}: correctness log is missing or changed")
+    _validate_publishable_log(correctness_path)
 
     rebuilt = build_series(
         runs,
@@ -1294,7 +1435,7 @@ def validate_series_path(
 
 def validate_series_command(args: argparse.Namespace) -> int:
     series = validate_series_path(
-        args.series, args.runs_dir, verify_current_checkout=True
+        args.series, args.runs_dir, verify_current_checkout=args.verify_checkout
     )
     print(
         f"validated {series['repeat_count']} raw runs; "
@@ -1478,38 +1619,71 @@ def compare_series(args: argparse.Namespace) -> int:
 
 
 _ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
-_SECRET_PATTERNS = (
+_SECRET_LITERAL_PATTERNS = (
     re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{20,}\b"),
+    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b"),
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
     re.compile(
-        r"(?i)\b(api[_-]?key|authorization|password|secret|token)\b"
-        r"(\s*[:=]\s*)([^\s,;]+)"
+        r"\beyJ[A-Za-z0-9_-]{7,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"
     ),
+)
+_AUTHORIZATION_RE = re.compile(r"(?im)^(\s*authorization\s*:\s*).*$")
+_KEY_VALUE_SECRET_RE = re.compile(
+    r"(?i)\b([A-Za-z0-9_]*(?:api[_-]?key|password|secret|token)[A-Za-z0-9_]*)\b"
+    r"(\s*[:=]\s*)([^\s,;]+)"
+)
+_PRIVATE_KEY_RE = re.compile(
+    r"-----BEGIN (?P<label>(?:[A-Z0-9]+ )*PRIVATE KEY)-----.*?"
+    r"-----END (?P=label)-----",
+    re.DOTALL,
 )
 _TEMP_PATH_RE = re.compile(
     r"(?<![A-Za-z0-9:])(?:/private/tmp|/tmp|/var/folders)/[^\s'\";,)]*"
 )
 _WINDOWS_HOME_RE = re.compile(r"(?i)[A-Z]:\\Users\\[^\\\s]+")
+_UNIX_HOME_RE = re.compile(r"/(?:Users|home)/[^/\s]+")
+
+
+def _validate_publishable_log(path: Path) -> None:
+    contents = path.read_text(encoding="utf-8", errors="replace")
+    if _ANSI_RE.search(contents):
+        raise ValueError(f"{path}: log still contains terminal control sequences")
+    if _TEMP_PATH_RE.search(contents) or _WINDOWS_HOME_RE.search(contents):
+        raise ValueError(f"{path}: log still contains a sensitive absolute path")
+    if _UNIX_HOME_RE.search(contents):
+        raise ValueError(f"{path}: log still contains a user home path")
+    sentinel_root = Path("/__feedforge_redaction_source_root_sentinel__")
+    if redact_text(contents, sentinel_root) != contents:
+        raise ValueError(f"{path}: log still contains credential-like text")
 
 
 def redact_text(text: str, source_root: Path) -> str:
     redacted = _ANSI_RE.sub("", text)
     replacements = {
+        str(source_root): "<SOURCE_ROOT>",
+        source_root.as_posix(): "<SOURCE_ROOT>",
         str(source_root.resolve()): "<SOURCE_ROOT>",
         source_root.resolve().as_posix(): "<SOURCE_ROOT>",
         str(Path.home().resolve()): "<HOME>",
         Path.home().resolve().as_posix(): "<HOME>",
     }
+    resolved_root = source_root.resolve().as_posix()
+    if resolved_root.startswith("/private/"):
+        replacements[resolved_root[len("/private"):]] = "<SOURCE_ROOT>"
     for value in sorted((item for item in replacements if item), key=len, reverse=True):
         redacted = redacted.replace(value, replacements[value])
         redacted = redacted.replace(value.replace("/", "\\"), replacements[value])
     redacted = _WINDOWS_HOME_RE.sub("<HOME>", redacted)
     redacted = _TEMP_PATH_RE.sub("<TEMP_PATH>", redacted)
-    for pattern in _SECRET_PATTERNS:
-        if pattern.groups >= 3:
-            redacted = pattern.sub(lambda match: f"{match.group(1)}{match.group(2)}<REDACTED>", redacted)
-        else:
-            redacted = pattern.sub("<REDACTED>", redacted)
+    redacted = _PRIVATE_KEY_RE.sub("<REDACTED PRIVATE KEY>", redacted)
+    redacted = _AUTHORIZATION_RE.sub(
+        lambda match: f"{match.group(1)}<REDACTED>", redacted
+    )
+    for pattern in _SECRET_LITERAL_PATTERNS:
+        redacted = pattern.sub("<REDACTED>", redacted)
+    redacted = _KEY_VALUE_SECRET_RE.sub(
+        lambda match: f"{match.group(1)}{match.group(2)}<REDACTED>", redacted
+    )
     return redacted
 
 
@@ -1530,7 +1704,7 @@ def redact_log(args: argparse.Namespace) -> int:
             raise ValueError("redaction left a sensitive absolute path in the output")
     header = (
         "# FeedForge benchmark log: mechanically redacted copy\n"
-        "# Review this file manually before publication.\n"
+        "# Mechanical checks are not exhaustive; review manually before publication.\n"
     )
     atomic_text(output, header + redacted)
     print(f"redacted log: {output}")
@@ -1580,6 +1754,11 @@ def make_parser() -> argparse.ArgumentParser:
     )
     series_parser.add_argument("--series", required=True, type=Path)
     series_parser.add_argument("--runs-dir", required=True, type=Path)
+    series_parser.add_argument(
+        "--verify-checkout",
+        action="store_true",
+        help="also require the current clean HEAD and local executable to match",
+    )
     series_parser.set_defaults(function=validate_series_command)
 
     compare_parser = subparsers.add_parser(
