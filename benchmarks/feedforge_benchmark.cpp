@@ -7,7 +7,7 @@
 #include <feedforge_benchmark_build_config.hpp>
 
 #include <algorithm>
-#include <atomic>
+#include <array>
 #include <charconv>
 #include <chrono>
 #include <cmath>
@@ -40,6 +40,8 @@ struct all_api {
   using decoder = all_messages::decoder;
   using metadata = all_messages::pipeline_metadata;
 
+  template <class Sink> using chunked_replayer = all_messages::chunked_replayer<Sink>;
+
   template <class Sink>
   [[nodiscard]] static feedforge::replay_summary replay(
       const std::span<const std::byte> input, Sink& sink) noexcept {
@@ -51,6 +53,8 @@ struct order_api {
   using decoder = order_events::decoder;
   using metadata = order_events::pipeline_metadata;
 
+  template <class Sink> using chunked_replayer = order_events::chunked_replayer<Sink>;
+
   template <class Sink>
   [[nodiscard]] static feedforge::replay_summary replay(
       const std::span<const std::byte> input, Sink& sink) noexcept {
@@ -58,8 +62,9 @@ struct order_api {
   }
 };
 
-enum class operation_kind : std::uint8_t { decode_one, replay_binary_file };
+enum class operation_kind : std::uint8_t { decode_one, replay_binary_file, chunked_replay };
 enum class pipeline_kind : std::uint8_t { all, order_events };
+enum class schedule_kind : std::uint8_t { none, frame_aligned, one_byte };
 
 struct options {
   std::uint64_t batch{256U};
@@ -80,12 +85,19 @@ struct case_definition {
   std::uint64_t messages_per_round{};
   std::uint64_t events_per_round{};
   std::string workload_sha256;
+  schedule_kind schedule{schedule_kind::none};
+  std::vector<std::size_t> chunk_sizes;
+  std::string schedule_sha256;
+  std::uint64_t pushes_per_round{};
+  std::uint64_t finish_calls_per_round{};
 };
 
 struct execution_result {
   std::uint64_t checksum{};
   std::uint64_t events{};
   std::uint64_t frames{};
+  std::uint64_t pushes{};
+  std::uint64_t finish_calls{};
 };
 
 struct timed_execution {
@@ -99,6 +111,8 @@ struct sample {
   std::uint64_t bytes{};
   std::uint64_t messages{};
   std::uint64_t events{};
+  std::uint64_t pushes{};
+  std::uint64_t finish_calls{};
   std::uint64_t checksum{};
 };
 
@@ -109,6 +123,7 @@ struct case_result {
   bench::distribution sample_time_ns;
   bench::distribution ns_per_message;
   std::optional<bench::distribution> ns_per_event;
+  std::optional<bench::distribution> ns_per_push;
   bench::distribution bytes_per_second;
   bench::distribution messages_per_second;
   std::optional<bench::distribution> events_per_second;
@@ -142,12 +157,7 @@ struct report {
 
 template <class Value>
 inline void do_not_optimize(const Value& value) noexcept {
-#if defined(__GNUC__) || defined(__clang__)
-  asm volatile("" : : "m"(value) : "memory");
-#else
-  std::atomic_signal_fence(std::memory_order_seq_cst);
-  (void)value;
-#endif
+  bench::opaque_escape(&value, sizeof(value));
 }
 
 struct checksum_sink {
@@ -172,12 +182,32 @@ volatile std::uint64_t escaped_checksum{};
 
 [[nodiscard]] constexpr std::string_view operation_name(
     const operation_kind operation) noexcept {
-  return operation == operation_kind::decode_one ? "decode_one" : "replay_binary_file";
+  switch (operation) {
+  case operation_kind::decode_one:
+    return "decode_one";
+  case operation_kind::replay_binary_file:
+    return "replay_binary_file";
+  case operation_kind::chunked_replay:
+    return "chunked_replay";
+  }
+  return "unknown";
 }
 
 [[nodiscard]] constexpr std::string_view pipeline_name(
     const pipeline_kind pipeline) noexcept {
   return pipeline == pipeline_kind::all ? "itch50_all" : "itch50_order_events";
+}
+
+[[nodiscard]] constexpr std::string_view schedule_name(const schedule_kind schedule) noexcept {
+  switch (schedule) {
+  case schedule_kind::none:
+    return "none";
+  case schedule_kind::frame_aligned:
+    return "frame_aligned";
+  case schedule_kind::one_byte:
+    return "one_byte";
+  }
+  return "unknown";
 }
 
 [[nodiscard]] std::uint64_t checked_multiply(const std::uint64_t left,
@@ -288,23 +318,60 @@ void print_usage(const std::string_view executable) {
   return *found;
 }
 
-[[nodiscard]] std::vector<case_definition> make_cases(
-    const std::vector<bench::workload>& workloads) {
+[[nodiscard]] std::vector<std::size_t> make_chunk_sizes(const schedule_kind schedule,
+                                                        const bench::workload& workload,
+                                                        const bench::corpus& corpus) {
+  std::vector<std::size_t> result;
+  if (schedule == schedule_kind::one_byte) {
+    result.assign(workload.binary_file.size(), 1U);
+    return result;
+  }
+  if (schedule != schedule_kind::frame_aligned) {
+    throw std::runtime_error("chunked benchmark case has no input schedule");
+  }
+
+  result.reserve(workload.fixture_indices.size() + 1U);
+  std::size_t scheduled_bytes{};
+  for (const std::size_t fixture_index : workload.fixture_indices) {
+    const std::size_t chunk_size = corpus.fixtures.at(fixture_index).payload.size() + 2U;
+    result.push_back(chunk_size);
+    scheduled_bytes += chunk_size;
+  }
+  result.push_back(2U);
+  scheduled_bytes += 2U;
+  if (scheduled_bytes != workload.binary_file.size()) {
+    throw std::runtime_error("frame-aligned chunk schedule does not cover workload");
+  }
+  return result;
+}
+
+[[nodiscard]] std::string make_schedule_sha256(const schedule_kind schedule,
+                                               const std::vector<std::size_t>& chunk_sizes) {
+  std::ostringstream normalized;
+  normalized << "feedforge-benchmark-chunk-schedule-v1;" << schedule_name(schedule) << ';';
+  for (const std::size_t chunk_size : chunk_sizes) {
+    normalized << chunk_size << ';';
+  }
+  return bench::sha256_hex(normalized.str());
+}
+
+[[nodiscard]] std::vector<case_definition>
+make_cases(const bench::corpus& corpus, const std::vector<bench::workload>& workloads) {
   const bench::workload& all_types = find_workload(workloads, "all_types");
   const bench::workload& selected = find_workload(workloads, "selected");
   const bench::workload& unselected = find_workload(workloads, "unselected");
   const bench::workload& mixed = find_workload(workloads, "mixed");
 
   std::vector<case_definition> result;
-  const auto add = [&result](const operation_kind operation,
-                             const pipeline_kind pipeline,
+  result.reserve(16U);
+  const auto add = [&result](const operation_kind operation, const pipeline_kind pipeline,
                              const bench::workload& workload) {
     const bool decode = operation == operation_kind::decode_one;
     const std::uint64_t events =
         pipeline == pipeline_kind::all ? workload.messages : workload.selected_events;
     result.push_back(case_definition{
-        std::string{operation_name(operation)} + "/" +
-            std::string{pipeline_name(pipeline)} + "/" + workload.name,
+        std::string{operation_name(operation)} + "/" + std::string{pipeline_name(pipeline)} + "/" +
+            workload.name,
         operation,
         pipeline,
         &workload,
@@ -312,6 +379,38 @@ void print_usage(const std::string_view executable) {
         workload.messages,
         events,
         decode ? workload.decode_sha256 : workload.replay_sha256,
+        schedule_kind::none,
+        {},
+        {},
+        0U,
+        0U,
+    });
+  };
+
+  const auto add_chunked = [&result, &corpus](const schedule_kind schedule,
+                                              const pipeline_kind pipeline,
+                                              const bench::workload& workload) {
+    std::vector<std::size_t> chunk_sizes = make_chunk_sizes(schedule, workload, corpus);
+    const std::uint64_t events =
+        pipeline == pipeline_kind::all ? workload.messages : workload.selected_events;
+    const std::uint64_t pushes = static_cast<std::uint64_t>(chunk_sizes.size());
+    const std::string schedule_sha256 = make_schedule_sha256(schedule, chunk_sizes);
+    result.push_back(case_definition{
+        std::string{operation_name(operation_kind::chunked_replay)} + "/" +
+            std::string{schedule_name(schedule)} + "/" + std::string{pipeline_name(pipeline)} +
+            "/" + workload.name,
+        operation_kind::chunked_replay,
+        pipeline,
+        &workload,
+        workload.framed_bytes,
+        workload.messages,
+        events,
+        workload.replay_sha256,
+        schedule,
+        std::move(chunk_sizes),
+        schedule_sha256,
+        pushes,
+        1U,
     });
   };
 
@@ -320,6 +419,12 @@ void print_usage(const std::string_view executable) {
   for (const bench::workload* workload : {&selected, &unselected, &mixed}) {
     add(operation_kind::decode_one, pipeline_kind::order_events, *workload);
     add(operation_kind::replay_binary_file, pipeline_kind::order_events, *workload);
+  }
+  add_chunked(schedule_kind::frame_aligned, pipeline_kind::all, all_types);
+  add_chunked(schedule_kind::one_byte, pipeline_kind::all, all_types);
+  for (const bench::workload* workload : {&selected, &unselected, &mixed}) {
+    add_chunked(schedule_kind::frame_aligned, pipeline_kind::order_events, *workload);
+    add_chunked(schedule_kind::one_byte, pipeline_kind::order_events, *workload);
   }
   return result;
 }
@@ -382,15 +487,64 @@ void verify_replay_workload(const bench::workload& workload,
              << summary.bytes_consumed << ':' << sink.checksum << ';';
 }
 
-[[nodiscard]] std::string verify_correctness(
-    const bench::corpus& corpus, const std::vector<bench::workload>& workloads) {
+[[nodiscard]] constexpr bool same_decode_outcome(const feedforge::decode_outcome& left,
+                                                 const feedforge::decode_outcome& right) noexcept {
+  return left.status == right.status && left.message_type == right.message_type &&
+         left.expected_size == right.expected_size && left.actual_size == right.actual_size;
+}
+
+[[nodiscard]] constexpr bool same_replay_summary(const feedforge::replay_summary& left,
+                                                 const feedforge::replay_summary& right) noexcept {
+  return left.status == right.status && left.frames_seen == right.frames_seen &&
+         left.events_emitted == right.events_emitted &&
+         left.known_messages_skipped == right.known_messages_skipped &&
+         left.unknown_messages_skipped == right.unknown_messages_skipped &&
+         left.bytes_consumed == right.bytes_consumed && left.error_offset == right.error_offset &&
+         left.framing_error == right.framing_error &&
+         same_decode_outcome(left.decode_error, right.decode_error);
+}
+
+template <class Api>
+void verify_chunked_case(const case_definition& definition, std::ostringstream& normalized) {
+  checksum_sink strict_sink;
+  const auto bytes = std::span<const std::byte>{definition.workload->binary_file.data(),
+                                                definition.workload->binary_file.size()};
+  const feedforge::replay_summary strict = Api::replay(bytes, strict_sink);
+
+  std::array<std::byte, 64U> scratch{};
+  checksum_sink chunked_sink;
+  typename Api::template chunked_replayer<checksum_sink> replay{scratch, chunked_sink};
+  std::size_t position{};
+  std::uint64_t pushes{};
+  for (const std::size_t chunk_size : definition.chunk_sizes) {
+    if (position > bytes.size() || chunk_size > bytes.size() - position) {
+      throw std::runtime_error("chunk schedule exceeds workload for " + definition.id);
+    }
+    static_cast<void>(replay.push(bytes.subspan(position, chunk_size)));
+    position += chunk_size;
+    ++pushes;
+  }
+  const feedforge::replay_summary chunked = replay.finish();
+  if (position != bytes.size() || pushes != definition.pushes_per_round ||
+      definition.finish_calls_per_round != 1U || !same_replay_summary(chunked, strict) ||
+      chunked_sink.events != strict_sink.events || chunked_sink.checksum != strict_sink.checksum) {
+    throw std::runtime_error("pre-timing chunked replay equivalence failed for " + definition.id);
+  }
+  normalized << definition.id << ':' << chunked.frames_seen << ':' << chunked.events_emitted << ':'
+             << chunked.known_messages_skipped << ':' << chunked.bytes_consumed << ':' << pushes
+             << ':' << chunked_sink.checksum << ';';
+}
+
+[[nodiscard]] std::string verify_correctness(const bench::corpus& corpus,
+                                             const std::vector<bench::workload>& workloads,
+                                             const std::vector<case_definition>& cases) {
   if (corpus.fixtures.size() != all_api::metadata::known_messages.size() ||
       corpus.fixtures.size() != order_api::metadata::known_messages.size()) {
     throw std::runtime_error("fixture count does not match generated known-message tables");
   }
 
   std::ostringstream normalized;
-  normalized << "feedforge-benchmark-correctness-v1;";
+  normalized << "feedforge-benchmark-correctness-v2;";
   for (const bench::fixture& fixture : corpus.fixtures) {
     verify_decode_fixture<all_api>(fixture, true, normalized);
     verify_decode_fixture<order_api>(fixture, fixture.order_events_selected, normalized);
@@ -398,6 +552,21 @@ void verify_replay_workload(const bench::workload& workload,
   for (const bench::workload& workload : workloads) {
     verify_replay_workload<all_api>(workload, workload.messages, normalized);
     verify_replay_workload<order_api>(workload, workload.selected_events, normalized);
+  }
+  std::size_t chunked_cases{};
+  for (const case_definition& definition : cases) {
+    if (definition.operation != operation_kind::chunked_replay) {
+      continue;
+    }
+    if (definition.pipeline == pipeline_kind::all) {
+      verify_chunked_case<all_api>(definition, normalized);
+    } else {
+      verify_chunked_case<order_api>(definition, normalized);
+    }
+    ++chunked_cases;
+  }
+  if (chunked_cases != 8U) {
+    throw std::runtime_error("benchmark contract does not contain eight chunked cases");
   }
 
   const bench::workload& mixed = find_workload(workloads, "mixed");
@@ -439,7 +608,7 @@ template <class Api>
   }
   checksum = mix_checksum(checksum, sink.checksum);
   checksum = mix_checksum(checksum, sink.events);
-  return execution_result{checksum, sink.events, 0U};
+  return execution_result{checksum, sink.events, 0U, 0U, 0U};
 }
 
 template <class Api>
@@ -463,7 +632,43 @@ template <class Api>
   }
   checksum = mix_checksum(checksum, sink.checksum);
   checksum = mix_checksum(checksum, sink.events);
-  return execution_result{checksum, sink.events, frames};
+  return execution_result{checksum, sink.events, frames, 0U, 0U};
+}
+
+template <class Api>
+[[nodiscard]] execution_result execute_chunked(const case_definition& definition,
+                                               const std::uint64_t rounds, checksum_sink& sink,
+                                               std::span<std::byte> scratch) {
+  std::uint64_t checksum{0x3c6ef372fe94f82bULL};
+  std::uint64_t frames{};
+  std::uint64_t pushes{};
+  std::uint64_t finish_calls{};
+  const auto input = std::span<const std::byte>{definition.workload->binary_file.data(),
+                                                definition.workload->binary_file.size()};
+  for (std::uint64_t round = 0U; round < rounds; ++round) {
+    typename Api::template chunked_replayer<checksum_sink> replay{scratch, sink};
+    std::size_t position{};
+    do_not_optimize(input);
+    for (const std::size_t chunk_size : definition.chunk_sizes) {
+      static_cast<void>(replay.push(input.subspan(position, chunk_size)));
+      position += chunk_size;
+      ++pushes;
+    }
+    const feedforge::replay_summary summary = replay.finish();
+    ++finish_calls;
+    frames += summary.frames_seen;
+    checksum = mix_checksum(checksum, static_cast<std::uint64_t>(summary.status));
+    checksum = mix_checksum(checksum, summary.frames_seen);
+    checksum = mix_checksum(checksum, summary.events_emitted);
+    checksum = mix_checksum(checksum, summary.known_messages_skipped);
+    checksum = mix_checksum(checksum, summary.bytes_consumed);
+    checksum = mix_checksum(checksum, round);
+  }
+  checksum = mix_checksum(checksum, pushes);
+  checksum = mix_checksum(checksum, finish_calls);
+  checksum = mix_checksum(checksum, sink.checksum);
+  checksum = mix_checksum(checksum, sink.events);
+  return execution_result{checksum, sink.events, frames, pushes, finish_calls};
 }
 
 template <class Api>
@@ -501,6 +706,22 @@ template <class Api>
   return timed_execution{static_cast<std::uint64_t>(elapsed), execution};
 }
 
+template <class Api>
+[[nodiscard]] timed_execution time_chunked(const case_definition& definition,
+                                           const std::uint64_t rounds) {
+  std::array<std::byte, 64U> scratch{};
+  checksum_sink sink;
+  const clock_type::time_point start = clock_type::now();
+  const execution_result execution = execute_chunked<Api>(definition, rounds, sink, scratch);
+  const clock_type::time_point finish = clock_type::now();
+  const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(finish - start).count();
+  if (elapsed < 0) {
+    throw std::runtime_error("steady clock moved backwards");
+  }
+  escaped_checksum = execution.checksum;
+  return timed_execution{static_cast<std::uint64_t>(elapsed), execution};
+}
+
 [[nodiscard]] timed_execution time_case(const case_definition& definition,
                                         const bench::corpus& corpus,
                                         const std::uint64_t rounds) {
@@ -509,9 +730,12 @@ template <class Api>
                ? time_decode<all_api>(definition, corpus, rounds)
                : time_decode<order_api>(definition, corpus, rounds);
   }
-  return definition.pipeline == pipeline_kind::all
-             ? time_replay<all_api>(definition, rounds)
-             : time_replay<order_api>(definition, rounds);
+  if (definition.operation == operation_kind::replay_binary_file) {
+    return definition.pipeline == pipeline_kind::all ? time_replay<all_api>(definition, rounds)
+                                                     : time_replay<order_api>(definition, rounds);
+  }
+  return definition.pipeline == pipeline_kind::all ? time_chunked<all_api>(definition, rounds)
+                                                   : time_chunked<order_api>(definition, rounds);
 }
 
 void verify_timed_execution(const case_definition& definition,
@@ -522,12 +746,20 @@ void verify_timed_execution(const case_definition& definition,
   if (measured.execution.events != expected_events) {
     throw std::runtime_error("timed event count changed for " + definition.id);
   }
-  if (definition.operation == operation_kind::replay_binary_file) {
+  if (definition.operation != operation_kind::decode_one) {
     const std::uint64_t expected_frames =
         checked_multiply(definition.messages_per_round, rounds, definition.id);
     if (measured.execution.frames != expected_frames) {
       throw std::runtime_error("timed replay frame count changed for " + definition.id);
     }
+  }
+  const std::uint64_t expected_pushes =
+      checked_multiply(definition.pushes_per_round, rounds, definition.id);
+  const std::uint64_t expected_finish_calls =
+      checked_multiply(definition.finish_calls_per_round, rounds, definition.id);
+  if (measured.execution.pushes != expected_pushes ||
+      measured.execution.finish_calls != expected_finish_calls) {
+    throw std::runtime_error("timed chunk schedule count changed for " + definition.id);
   }
   if (measured.execution.checksum == 0U) {
     throw std::runtime_error("anti-elision checksum is zero for " + definition.id);
@@ -539,16 +771,17 @@ void verify_timed_execution(const case_definition& definition,
                                              const options& configuration) {
   const double target =
       configuration.minimum_time_ms * 1'000'000.0;
+  const double calibration_target = target * 1.25;
   std::uint64_t rounds = configuration.batch;
   for (std::size_t attempt = 0U; attempt < 12U; ++attempt) {
     const timed_execution measured = time_case(definition, corpus, rounds);
     verify_timed_execution(definition, rounds, measured);
-    if (static_cast<double>(measured.elapsed_ns) >= target) {
+    if (static_cast<double>(measured.elapsed_ns) >= calibration_target) {
       return rounds;
     }
     const double observed =
         std::max(1.0, static_cast<double>(measured.elapsed_ns));
-    const double requested_scale = std::ceil((target / observed) * 1.10);
+    const double requested_scale = std::ceil((calibration_target / observed) * 1.10);
     const auto scale = static_cast<std::uint64_t>(
         std::clamp(requested_scale, 2.0, 16.0));
     if (rounds > std::numeric_limits<std::uint64_t>::max() / scale) {
@@ -589,11 +822,11 @@ void verify_timed_execution(const case_definition& definition,
     result.samples.push_back(sample{
         measured.elapsed_ns,
         result.rounds_per_sample,
-        checked_multiply(definition.bytes_per_round, result.rounds_per_sample,
-                         definition.id),
-        checked_multiply(definition.messages_per_round, result.rounds_per_sample,
-                         definition.id),
-        checked_multiply(definition.events_per_round, result.rounds_per_sample,
+        checked_multiply(definition.bytes_per_round, result.rounds_per_sample, definition.id),
+        checked_multiply(definition.messages_per_round, result.rounds_per_sample, definition.id),
+        checked_multiply(definition.events_per_round, result.rounds_per_sample, definition.id),
+        checked_multiply(definition.pushes_per_round, result.rounds_per_sample, definition.id),
+        checked_multiply(definition.finish_calls_per_round, result.rounds_per_sample,
                          definition.id),
         measured.execution.checksum,
     });
@@ -602,12 +835,14 @@ void verify_timed_execution(const case_definition& definition,
   std::vector<double> sample_times;
   std::vector<double> ns_per_message;
   std::vector<double> ns_per_event;
+  std::vector<double> ns_per_push;
   std::vector<double> bytes_per_second;
   std::vector<double> messages_per_second;
   std::vector<double> events_per_second;
   sample_times.reserve(result.samples.size());
   ns_per_message.reserve(result.samples.size());
   ns_per_event.reserve(result.samples.size());
+  ns_per_push.reserve(result.samples.size());
   bytes_per_second.reserve(result.samples.size());
   messages_per_second.reserve(result.samples.size());
   events_per_second.reserve(result.samples.size());
@@ -622,6 +857,9 @@ void verify_timed_execution(const case_definition& definition,
       ns_per_event.push_back(elapsed / static_cast<double>(current.events));
       events_per_second.push_back(static_cast<double>(current.events) / seconds);
     }
+    if (current.pushes != 0U) {
+      ns_per_push.push_back(elapsed / static_cast<double>(current.pushes));
+    }
   }
 
   result.sample_time_ns = bench::summarize(sample_times);
@@ -632,6 +870,9 @@ void verify_timed_execution(const case_definition& definition,
     result.ns_per_event = bench::summarize(ns_per_event);
     result.events_per_second = bench::summarize(events_per_second);
   }
+  if (!ns_per_push.empty()) {
+    result.ns_per_push = bench::summarize(ns_per_push);
+  }
   result.relative_mad = result.ns_per_message.mad / result.ns_per_message.median;
   result.relative_p95_p05_spread =
       (result.ns_per_message.p95 - result.ns_per_message.p05) /
@@ -639,10 +880,8 @@ void verify_timed_execution(const case_definition& definition,
   result.noisy =
       result.relative_mad > 0.05 || result.relative_p95_p05_spread > 0.20;
   const double target_ns = configuration.minimum_time_ms * 1'000'000.0;
-  result.implausible =
-      result.sample_time_ns.minimum < target_ns * 0.75 ||
-      result.ns_per_message.median < 0.01 ||
-      result.sample_time_ns.minimum <= 0.0;
+  result.implausible = result.sample_time_ns.minimum < target_ns ||
+                       result.ns_per_message.median < 0.01 || result.sample_time_ns.minimum <= 0.0;
   if (result.noisy) {
     result.warnings.emplace_back(
         "sample dispersion exceeds the 5% MAD or 20% p95-p05 diagnostic bound");
@@ -687,26 +926,24 @@ void append_distribution(std::ostringstream& output,
     }
     const case_result& result = data.results[index];
     const case_definition& definition = *result.definition;
-    output << "{\"anti_elision_checksum\":"
-           << bench::json_escape([&]() {
-                std::ostringstream checksum;
-                checksum << "0x" << std::hex << result.samples.front().checksum;
-                return checksum.str();
-              }())
+    output << "{\"anti_elision_checksum\":" << bench::json_escape([&]() {
+      std::ostringstream checksum;
+      checksum << "0x" << std::hex << result.samples.front().checksum;
+      return checksum.str();
+    }())
            << ",\"bytes_per_round\":" << definition.bytes_per_round
            << ",\"events_per_round\":" << definition.events_per_round
+           << ",\"finish_calls_per_round\":" << definition.finish_calls_per_round
            << ",\"id\":" << bench::json_escape(definition.id)
            << ",\"messages_per_round\":" << definition.messages_per_round
-           << ",\"operation\":"
-           << bench::json_escape(operation_name(definition.operation))
-           << ",\"pipeline\":"
-           << bench::json_escape(pipeline_name(definition.pipeline))
-           << ",\"quality\":{\"implausible\":"
-           << (result.implausible ? "true" : "false")
+           << ",\"operation\":" << bench::json_escape(operation_name(definition.operation))
+           << ",\"pipeline\":" << bench::json_escape(pipeline_name(definition.pipeline))
+           << ",\"pushes_per_round\":" << definition.pushes_per_round
+           << ",\"quality\":{\"implausible\":" << (result.implausible ? "true" : "false")
            << ",\"noisy\":" << (result.noisy ? "true" : "false")
            << ",\"relative_mad\":" << result.relative_mad
-           << ",\"relative_p95_p05_spread\":"
-           << result.relative_p95_p05_spread << ",\"warnings\":[";
+           << ",\"relative_p95_p05_spread\":" << result.relative_p95_p05_spread
+           << ",\"warnings\":[";
     for (std::size_t warning = 0U; warning < result.warnings.size(); ++warning) {
       if (warning != 0U) {
         output << ',';
@@ -725,12 +962,23 @@ void append_distribution(std::ostringstream& output,
       checksum << "0x" << std::hex << current.checksum;
       output << "{\"bytes\":" << current.bytes
              << ",\"checksum\":" << bench::json_escape(checksum.str())
-             << ",\"elapsed_ns\":" << current.elapsed_ns
-             << ",\"events\":" << current.events
-             << ",\"messages\":" << current.messages
-             << ",\"rounds\":" << current.rounds << '}';
+             << ",\"elapsed_ns\":" << current.elapsed_ns << ",\"events\":" << current.events
+             << ",\"finish_calls\":" << current.finish_calls << ",\"messages\":" << current.messages
+             << ",\"pushes\":" << current.pushes << ",\"rounds\":" << current.rounds << '}';
     }
-    output << "],\"statistics\":{\"bytes_per_second\":";
+    output << "],\"schedule\":";
+    if (definition.schedule == schedule_kind::none) {
+      output << "null";
+    } else {
+      output << bench::json_escape(schedule_name(definition.schedule));
+    }
+    output << ",\"schedule_sha256\":";
+    if (definition.schedule_sha256.empty()) {
+      output << "null";
+    } else {
+      output << bench::json_escape(definition.schedule_sha256);
+    }
+    output << ",\"statistics\":{\"bytes_per_second\":";
     append_distribution(output, result.bytes_per_second);
     output << ",\"events_per_second\":";
     if (result.events_per_second.has_value()) {
@@ -748,6 +996,12 @@ void append_distribution(std::ostringstream& output,
     }
     output << ",\"ns_per_message\":";
     append_distribution(output, result.ns_per_message);
+    output << ",\"ns_per_push\":";
+    if (result.ns_per_push.has_value()) {
+      append_distribution(output, *result.ns_per_push);
+    } else {
+      output << "null";
+    }
     output << ",\"sample_time_ns\":";
     append_distribution(output, result.sample_time_ns);
     output << "},\"workload\":"
@@ -755,22 +1009,17 @@ void append_distribution(std::ostringstream& output,
            << ",\"workload_sha256\":"
            << bench::json_escape(definition.workload_sha256) << '}';
   }
-  output << "],\"build\":{\"build_type\":"
-         << bench::json_escape(bench::build_config::build_type)
+  output << "],\"build\":{\"build_type\":" << bench::json_escape(bench::build_config::build_type)
          << ",\"compiler_builtin\":"
 #if defined(__VERSION__)
          << bench::json_escape(__VERSION__)
 #else
          << bench::json_escape("unavailable")
 #endif
-         << ",\"compiler_id\":"
-         << bench::json_escape(bench::build_config::compiler_id)
-         << ",\"compiler_path\":"
-         << bench::json_escape(bench::build_config::compiler_path)
-         << ",\"compiler_version\":"
-         << bench::json_escape(bench::build_config::compiler_version)
-         << ",\"config_flags\":"
-         << bench::json_escape(bench::build_config::config_flags)
+         << ",\"compiler_id\":" << bench::json_escape(bench::build_config::compiler_id)
+         << ",\"compiler_path\":" << bench::json_escape(bench::build_config::compiler_path)
+         << ",\"compiler_version\":" << bench::json_escape(bench::build_config::compiler_version)
+         << ",\"config_flags\":" << bench::json_escape(bench::build_config::config_flags)
          << ",\"cxx_standard\":" << __cplusplus
          << ",\"feedforge_version\":" << bench::json_escape(feedforge::version_string)
          << ",\"generator\":" << bench::json_escape(bench::build_config::generator)
@@ -782,8 +1031,10 @@ void append_distribution(std::ostringstream& output,
          << bench::json_escape(order_events::pipeline_metadata::pipeline_fingerprint)
          << "},\"schema_fingerprint\":"
          << bench::json_escape(all_messages::pipeline_metadata::schema_fingerprint)
-         << ",\"target_flags\":"
-         << bench::json_escape(bench::build_config::target_flags) << "},\"command\":{"
+         << ",\"source_dirty\":" << (bench::build_config::source_dirty ? "true" : "false")
+         << ",\"source_revision\":" << bench::json_escape(bench::build_config::source_revision)
+         << ",\"target_flags\":" << bench::json_escape(bench::build_config::target_flags)
+         << "},\"command\":{"
          << "\"argv\":[";
   for (std::size_t index = 0U; index < data.arguments.size(); ++index) {
     if (index != 0U) {
@@ -823,15 +1074,15 @@ void append_distribution(std::ostringstream& output,
   }
   output << "],\"sha256\":" << bench::json_escape(data.corpus.sha256)
          << ",\"source\":\"independently reviewed tests/fixtures/itch50 raw_hex\"}"
-         << ",\"correctness\":{\"checksum\":"
-         << bench::json_escape(data.correctness_checksum)
-         << ",\"fixture_decodes\":46,\"strict_replay\":true,\"verified\":true}"
+         << ",\"correctness\":{\"checksum\":" << bench::json_escape(data.correctness_checksum)
+         << ",\"chunked_replay_cases\":8,\"fixture_decodes\":46,"
+            "\"sink_order_verified\":true,\"strict_replay\":true,"
+            "\"verified\":true}"
          << ",\"host\":{\"architecture\":" << bench::json_escape(data.host.architecture)
          << ",\"cpu_affinity\":" << bench::json_escape(data.host.cpu_affinity)
          << ",\"cpu_governor\":" << bench::json_escape(data.host.cpu_governor)
          << ",\"cpu_model\":" << bench::json_escape(data.host.cpu_model)
-         << ",\"kernel\":" << bench::json_escape(data.host.kernel)
-         << ",\"limitations\":[";
+         << ",\"kernel\":" << bench::json_escape(data.host.kernel) << ",\"limitations\":[";
   for (std::size_t index = 0U; index < data.host.limitations.size(); ++index) {
     if (index != 0U) {
       output << ',';
@@ -862,68 +1113,74 @@ void append_distribution(std::ostringstream& output,
   std::ostringstream output;
   output.imbue(std::locale::classic());
   output << std::setprecision(17);
-  output
-      << "schema_version,contract_version,timestamp_utc,benchmark_id,operation,pipeline,"
-         "workload,workload_sha256,corpus_sha256,bytes_per_round,messages_per_round,"
-         "events_per_round,rounds_per_sample,samples,warmup,minimum_time_ms,"
-         "median_ns_per_message,p05_ns_per_message,p95_ns_per_message,mad_ns_per_message,"
-         "median_ns_per_event,median_bytes_per_second,median_messages_per_second,"
-         "median_events_per_second,relative_mad,relative_p95_p05_spread,noisy,implausible,"
-         "anti_elision_checksum,feedforge_version,build_type,compiler_id,compiler_version,"
-         "compiler_path,config_flags,target_flags,os,kernel,architecture,cpu_model,"
-         "machine_model,logical_cpus,physical_cpus,memory_bytes,cpu_affinity,cpu_governor,"
-         "turbo_state,correctness_checksum,command\n";
+  output << "schema_version,contract_version,timestamp_utc,benchmark_id,operation,pipeline,"
+            "schedule,schedule_sha256,workload,workload_sha256,corpus_sha256,"
+            "bytes_per_round,messages_per_round,events_per_round,pushes_per_round,"
+            "finish_calls_per_round,rounds_per_sample,samples,warmup,minimum_time_ms,"
+            "median_ns_per_message,p05_ns_per_message,p95_ns_per_message,mad_ns_per_message,"
+            "median_ns_per_event,median_ns_per_push,median_bytes_per_second,"
+            "median_messages_per_second,"
+            "median_events_per_second,relative_mad,relative_p95_p05_spread,noisy,implausible,"
+            "anti_elision_checksum,feedforge_version,source_revision,source_dirty,build_type,"
+            "compiler_id,compiler_version,"
+            "compiler_path,config_flags,target_flags,os,kernel,architecture,cpu_model,"
+            "machine_model,logical_cpus,physical_cpus,memory_bytes,cpu_affinity,cpu_governor,"
+            "turbo_state,correctness_checksum,command\n";
   for (const case_result& result : data.results) {
     const case_definition& definition = *result.definition;
     std::ostringstream checksum;
     checksum << "0x" << std::hex << result.samples.front().checksum;
-    output << bench::result_schema_version << ','
-           << bench::csv_escape(bench::contract_version) << ','
-           << bench::csv_escape(data.timestamp) << ','
-           << bench::csv_escape(definition.id) << ','
-           << bench::csv_escape(operation_name(definition.operation)) << ','
+    output << bench::result_schema_version << ',' << bench::csv_escape(bench::contract_version)
+           << ',' << bench::csv_escape(data.timestamp) << ',' << bench::csv_escape(definition.id)
+           << ',' << bench::csv_escape(operation_name(definition.operation)) << ','
            << bench::csv_escape(pipeline_name(definition.pipeline)) << ','
+           << (definition.schedule == schedule_kind::none
+                   ? std::string{}
+                   : bench::csv_escape(schedule_name(definition.schedule)))
+           << ',' << bench::csv_escape(definition.schedule_sha256) << ','
            << bench::csv_escape(definition.workload->name) << ','
            << bench::csv_escape(definition.workload_sha256) << ','
-           << bench::csv_escape(data.corpus.sha256) << ','
-           << definition.bytes_per_round << ',' << definition.messages_per_round << ','
-           << definition.events_per_round << ',' << result.rounds_per_sample << ','
-           << data.configuration.samples << ',' << data.configuration.warmup << ','
-           << data.configuration.minimum_time_ms << ','
+           << bench::csv_escape(data.corpus.sha256) << ',' << definition.bytes_per_round << ','
+           << definition.messages_per_round << ',' << definition.events_per_round << ','
+           << definition.pushes_per_round << ',' << definition.finish_calls_per_round << ','
+           << result.rounds_per_sample << ',' << data.configuration.samples << ','
+           << data.configuration.warmup << ',' << data.configuration.minimum_time_ms << ','
            << result.ns_per_message.median << ',' << result.ns_per_message.p05 << ','
            << result.ns_per_message.p95 << ',' << result.ns_per_message.mad << ',';
     if (result.ns_per_event.has_value()) {
       output << result.ns_per_event->median;
+    }
+    output << ',';
+    if (result.ns_per_push.has_value()) {
+      output << result.ns_per_push->median;
     }
     output << ',' << result.bytes_per_second.median << ','
            << result.messages_per_second.median << ',';
     if (result.events_per_second.has_value()) {
       output << result.events_per_second->median;
     }
-    output << ',' << result.relative_mad << ','
-           << result.relative_p95_p05_spread << ','
-           << (result.noisy ? "true" : "false") << ','
-           << (result.implausible ? "true" : "false") << ','
-           << bench::csv_escape(checksum.str()) << ','
+    output << ',' << result.relative_mad << ',' << result.relative_p95_p05_spread << ','
+           << (result.noisy ? "true" : "false") << ',' << (result.implausible ? "true" : "false")
+           << ',' << bench::csv_escape(checksum.str()) << ','
            << bench::csv_escape(feedforge::version_string) << ','
+           << bench::csv_escape(bench::build_config::source_revision) << ','
+           << (bench::build_config::source_dirty ? "true" : "false") << ','
            << bench::csv_escape(bench::build_config::build_type) << ','
            << bench::csv_escape(bench::build_config::compiler_id) << ','
            << bench::csv_escape(bench::build_config::compiler_version) << ','
            << bench::csv_escape(bench::build_config::compiler_path) << ','
            << bench::csv_escape(bench::build_config::config_flags) << ','
            << bench::csv_escape(bench::build_config::target_flags) << ','
-           << bench::csv_escape(data.host.os) << ','
-           << bench::csv_escape(data.host.kernel) << ','
+           << bench::csv_escape(data.host.os) << ',' << bench::csv_escape(data.host.kernel) << ','
            << bench::csv_escape(data.host.architecture) << ','
            << bench::csv_escape(data.host.cpu_model) << ','
-           << bench::csv_escape(data.host.machine_model) << ','
-           << data.host.logical_cpus << ',' << data.host.physical_cpus << ','
-           << data.host.memory_bytes << ','
+           << bench::csv_escape(data.host.machine_model) << ',' << data.host.logical_cpus << ','
+           << data.host.physical_cpus << ',' << data.host.memory_bytes << ','
            << bench::csv_escape(data.host.cpu_affinity) << ','
            << bench::csv_escape(data.host.cpu_governor) << ','
            << bench::csv_escape(data.host.turbo_state) << ','
-           << bench::csv_escape(data.correctness_checksum) << ','
-           << bench::csv_escape(data.command) << '\n';
+           << bench::csv_escape(data.correctness_checksum) << ',' << bench::csv_escape(data.command)
+           << '\n';
   }
   return output.str();
 }
@@ -959,6 +1216,9 @@ void print_human(const report& data) {
     } else {
       std::cout << "  events n/a (known-unselected skip workload)";
     }
+    if (result.ns_per_push.has_value()) {
+      std::cout << "  " << result.ns_per_push->median << " ns/push";
+    }
     std::cout << "  rounds/sample=" << result.rounds_per_sample;
     if (result.noisy) {
       std::cout << "  [NOISY]";
@@ -989,15 +1249,14 @@ void print_human(const report& data) {
   }
   result.command =
       bench::join_command(std::span<char* const>{argv, static_cast<std::size_t>(argc)});
-  result.working_directory = std::filesystem::current_path().string();
+  result.working_directory = ".";
 
   // All file I/O, parsing, hashing, allocation, host discovery, and correctness
   // validation happen before any benchmark clock starts.
   result.corpus = bench::load_corpus(bench::build_config::fixture_directory);
   result.workloads = bench::make_workloads(result.corpus);
-  result.cases = make_cases(result.workloads);
-  result.correctness_checksum =
-      verify_correctness(result.corpus, result.workloads);
+  result.cases = make_cases(result.corpus, result.workloads);
+  result.correctness_checksum = verify_correctness(result.corpus, result.workloads, result.cases);
   result.host = bench::read_host_manifest();
   result.timer_resolution_ns = timer_resolution_ns();
   result.timestamp = bench::utc_timestamp();

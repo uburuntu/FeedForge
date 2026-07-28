@@ -10,7 +10,7 @@
 
 namespace feedforge::benchmark {
 
-inline constexpr std::string_view contract_version{"1.0.0"};
+inline constexpr std::string_view contract_version{"2.0.0"};
 inline constexpr std::uint32_t result_schema_version{1U};
 
 struct fixture {
@@ -79,5 +79,6 @@ struct host_manifest {
 [[nodiscard]] std::string csv_escape(std::string_view value);
 [[nodiscard]] std::string join_command(std::span<char* const> arguments);
 void atomic_write(const std::filesystem::path& path, std::string_view contents);
+void opaque_escape(const void* address, std::size_t size) noexcept;
 
 }  // namespace feedforge::benchmark

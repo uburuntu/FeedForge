@@ -24,6 +24,9 @@ inline constexpr std::string_view system_processor{
     R"feedforge(@FEEDFORGE_BENCH_SYSTEM_PROCESSOR@)feedforge"};
 inline constexpr std::string_view interprocedural_optimization{
     R"feedforge(@FEEDFORGE_BENCH_IPO@)feedforge"};
+inline constexpr std::string_view source_revision{
+    R"feedforge(@FEEDFORGE_BENCH_SOURCE_REVISION@)feedforge"};
+inline constexpr bool source_dirty{@FEEDFORGE_BENCH_SOURCE_DIRTY@};
 inline constexpr std::string_view fixture_directory{
     R"feedforge(@FEEDFORGE_BENCH_FIXTURE_DIR@)feedforge"};
 

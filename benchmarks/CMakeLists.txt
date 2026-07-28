@@ -31,6 +31,49 @@ set(FEEDFORGE_BENCH_TARGET_FLAGS "${_feedforge_bench_target_flags}")
 set(FEEDFORGE_BENCH_SYSTEM_NAME "${CMAKE_SYSTEM_NAME}")
 set(FEEDFORGE_BENCH_SYSTEM_PROCESSOR "${CMAKE_SYSTEM_PROCESSOR}")
 set(FEEDFORGE_BENCH_IPO "${CMAKE_INTERPROCEDURAL_OPTIMIZATION}")
+find_package(Git QUIET)
+set(FEEDFORGE_BENCH_SOURCE_REVISION "unavailable")
+set(FEEDFORGE_BENCH_SOURCE_DIRTY true)
+if(Git_FOUND)
+  execute_process(
+    COMMAND "${GIT_EXECUTABLE}" rev-parse --show-toplevel
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+    RESULT_VARIABLE _feedforge_bench_toplevel_result
+    OUTPUT_VARIABLE _feedforge_bench_toplevel
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+  )
+  execute_process(
+    COMMAND "${GIT_EXECUTABLE}" rev-parse --verify HEAD
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+    RESULT_VARIABLE _feedforge_bench_revision_result
+    OUTPUT_VARIABLE FEEDFORGE_BENCH_SOURCE_REVISION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+  )
+  execute_process(
+    COMMAND "${GIT_EXECUTABLE}" status --short --untracked-files=no
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+    RESULT_VARIABLE _feedforge_bench_status_result
+    OUTPUT_VARIABLE _feedforge_bench_status
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+  )
+  file(REAL_PATH "${PROJECT_SOURCE_DIR}" _feedforge_bench_expected_toplevel)
+  if(_feedforge_bench_toplevel_result EQUAL 0)
+    file(REAL_PATH "${_feedforge_bench_toplevel}" _feedforge_bench_actual_toplevel)
+  else()
+    set(_feedforge_bench_actual_toplevel "")
+  endif()
+  if(
+    _feedforge_bench_actual_toplevel STREQUAL _feedforge_bench_expected_toplevel
+    AND _feedforge_bench_revision_result EQUAL 0
+    AND _feedforge_bench_status_result EQUAL 0
+    AND _feedforge_bench_status STREQUAL ""
+  )
+    set(FEEDFORGE_BENCH_SOURCE_DIRTY false)
+  endif()
+endif()
 set(
   FEEDFORGE_BENCH_FIXTURE_DIR
   "${PROJECT_SOURCE_DIR}/tests/fixtures/itch50"
@@ -44,6 +87,7 @@ configure_file(
 add_executable(
   feedforge_benchmark
   feedforge_benchmark.cpp
+  benchmark_escape.cpp
   benchmark_support.cpp
 )
 target_compile_features(feedforge_benchmark PRIVATE cxx_std_20)
