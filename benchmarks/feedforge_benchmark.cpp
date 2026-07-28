@@ -769,18 +769,21 @@ void verify_timed_execution(const case_definition& definition,
 [[nodiscard]] std::uint64_t calibrate_rounds(const case_definition& definition,
                                              const bench::corpus& corpus,
                                              const options& configuration) {
-  const double target =
-      configuration.minimum_time_ms * 1'000'000.0;
-  const double calibration_target = target * 1.25;
+  const double target = configuration.minimum_time_ms * 1'000'000.0;
+  const double calibration_target = target * 3.0;
+  constexpr std::size_t probe_count{3U};
   std::uint64_t rounds = configuration.batch;
   for (std::size_t attempt = 0U; attempt < 12U; ++attempt) {
-    const timed_execution measured = time_case(definition, corpus, rounds);
-    verify_timed_execution(definition, rounds, measured);
-    if (static_cast<double>(measured.elapsed_ns) >= calibration_target) {
+    std::uint64_t fastest_elapsed = std::numeric_limits<std::uint64_t>::max();
+    for (std::size_t probe = 0U; probe < probe_count; ++probe) {
+      const timed_execution measured = time_case(definition, corpus, rounds);
+      verify_timed_execution(definition, rounds, measured);
+      fastest_elapsed = std::min(fastest_elapsed, measured.elapsed_ns);
+    }
+    if (static_cast<double>(fastest_elapsed) >= calibration_target) {
       return rounds;
     }
-    const double observed =
-        std::max(1.0, static_cast<double>(measured.elapsed_ns));
+    const double observed = std::max(1.0, static_cast<double>(fastest_elapsed));
     const double requested_scale = std::ceil((calibration_target / observed) * 1.10);
     const auto scale = static_cast<std::uint64_t>(
         std::clamp(requested_scale, 2.0, 16.0));
