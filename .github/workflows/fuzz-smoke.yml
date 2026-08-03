@@ -29,30 +29,37 @@ jobs:
       matrix:
         include:
           - name: BinaryFILE cursor
+            target: fuzz_binary_file
             executable: build/fuzz/fuzz/fuzz_binary_file
             corpus: build/fuzz/fuzz/corpus/binary_file
             artifact: binary-file
           - name: All-message decode_one
+            target: fuzz_decode_one
             executable: build/fuzz/fuzz/fuzz_decode_one
             corpus: build/fuzz/fuzz/corpus/decode_one
             artifact: decode-one
           - name: Independent differential decode
+            target: fuzz_differential_decode
             executable: build/fuzz/fuzz/fuzz_differential_decode
             corpus: build/fuzz/fuzz/corpus/differential_decode
             artifact: differential-decode
           - name: BinaryFILE replay
+            target: fuzz_replay
             executable: build/fuzz/fuzz/fuzz_replay
             corpus: build/fuzz/fuzz/corpus/replay
             artifact: replay
           - name: Compiler schema frontend
+            target: fuzz_compiler_schema
             executable: build/fuzz/fuzz/fuzz_compiler_schema
             corpus: build/fuzz/fuzz/corpus/compiler_schema
             artifact: compiler-schema
           - name: Compiler pipeline frontend
+            target: fuzz_compiler_pipeline
             executable: build/fuzz/fuzz/fuzz_compiler_pipeline
             corpus: build/fuzz/fuzz/corpus/compiler_pipeline
             artifact: compiler-pipeline
           - name: Compiler lowering and emission
+            target: fuzz_compiler_compile
             executable: build/fuzz/fuzz/fuzz_compiler_compile
             corpus: build/fuzz/fuzz/corpus/compiler_compile
             artifact: compiler-compile
@@ -68,8 +75,11 @@ jobs:
           cmake --preset fuzz
           -DCMAKE_CXX_COMPILER=clang++-18
           -DFEEDFORGE_WARNINGS_AS_ERRORS=ON
-      - name: Build all required fuzz targets
-        run: cmake --build --preset fuzz
+      - name: Build selected fuzz target
+        run: >-
+          cmake --build --preset fuzz
+          --target "${{ matrix.target }}"
+          --parallel 2
       - name: Prepare artifact directory
         run: mkdir -p "${RUNNER_TEMP}/fuzz-artifacts/${{ matrix.artifact }}"
       - name: Run deterministic fuzz smoke
